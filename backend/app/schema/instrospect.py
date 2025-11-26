@@ -55,7 +55,7 @@ def introspect_tables_and_columns(conn):
 # Key = tuple identifying the table.
 # Value = list of PK column names for that table.
 # Usually the list has 1 item, but it may have multiple.
-    
+
 def introspect_primary_keys(conn):
     pks = {}
     
@@ -102,8 +102,7 @@ def introspect_primary_keys(conn):
 
 
 
-def introspect_foreign_keys(conn):
-    pass
+
 #to get:
 
 # source table (the table that has the FK)
@@ -119,3 +118,56 @@ def introspect_foreign_keys(conn):
 #   },
 #   ...
 # ]
+def introspect_foreign_keys(conn):
+    fks = []
+
+    try:
+        curr = conn.cursor()
+
+        curr.execute("""
+                     SELECT src_ns.nspname AS from_schema, src_class.relname AS from_table, src_attr.attname AS from_column, tgt_ns.nspname AS to_schema, tgt_class.relname AS to_table, tgt_attr.attname AS to_column
+                     FROM pg_catalog.pg_constraint con
+                     -- Source table (table that has the FK)
+                     JOIN pg_catalog.pg_class src_class 
+                     ON con.conrelid = src_class.oid
+                     JOIN pg_catalog.pg_namespace src_ns 
+                     ON src_class.relnamespace = src_ns.oid
+                     -- Target table (table being referenced)
+                     JOIN pg_catalog.pg_class tgt_class 
+                     ON con.confrelid = tgt_class.oid
+                     JOIN pg_catalog.pg_namespace tgt_ns 
+                     ON tgt_class.relnamespace = tgt_ns.oid
+                     -- Source columns (unnest the conkey array to get each column)
+                     JOIN pg_catalog.pg_attribute src_attr
+                         ON src_attr.attrelid = con.conrelid
+                         AND src_attr.attnum = ANY(con.conkey)
+                     -- Target columns (unnest the confkey array to get each referenced column)
+                     JOIN pg_catalog.pg_attribute tgt_attr
+                         ON tgt_attr.attrelid = con.confrelid
+                         AND tgt_attr.attnum = con.confkey[array_position(con.conkey, src_attr.attnum)]
+                     WHERE con.contype = 'f'
+                         AND src_ns.nspname NOT IN ('pg_catalog', 'information_schema')
+                     ORDER BY src_ns.nspname, src_class.relname, array_position(con.conkey, src_attr.attnum)
+                     """)
+        fk_info = curr.fetchall()
+
+
+        for each in fk_info:
+            from_schema, from_table, from_column, to_schema, to_table, to_column = each
+            fks.append({
+                "from_table": (from_schema, from_table),
+                "from_column": from_column,
+                "to_table": (to_schema, to_table),
+                "to_column": to_column
+            })
+
+        return fks
+
+    except Exception as e:
+        raise Exception(f"Error introspecting foreign keys: {str(e)}") from e
+
+    finally:
+        try:
+            curr.close()
+        except Exception:
+            pass
