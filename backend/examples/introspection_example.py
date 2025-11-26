@@ -13,7 +13,7 @@ def example_direct_introspection():
     print("Example 1: Direct Introspection")
     print("=" * 60)
 
-    from app.schema.instrospect import (
+    from app.schema.introspect import (
         introspect_tables_and_columns,
         introspect_primary_keys,
         introspect_foreign_keys
