@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from app.db import DatabaseConfig, get_database_config, set_database_config, get_connection
+from app.schema.cache import clear_schema_cache
 
 
 router = APIRouter(prefix="/api/config", tags=["config"])
@@ -45,21 +46,26 @@ def set_db(config: DatabaseConfig):
         cur.close()
         conn.close()
 
+        # Clear schema cache since DB config changed
+        clear_schema_cache()
+
     except RuntimeError as e:
         # Restore old config on failure
         set_database_config(old_config) if old_config else None
 
         return {
-            "success" : False,
-            "message" : "Could not connect to database. Please verify your connection settings."
+            "success": False,
+            "message": "Could not connect to database. Please verify your connection settings.",
+            "error": str(e)
         }
     except Exception as e:
         # Restore old config on failure
         set_database_config(old_config) if old_config else None
 
         return {
-            "success" : False,
-            "message" : "An unexpected error occurred while connecting to the database."
+            "success": False,
+            "message": "An unexpected error occurred while connecting to the database.",
+            "error": str(e)
         }
 
     return {

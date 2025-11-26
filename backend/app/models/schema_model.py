@@ -113,10 +113,3 @@ class CanonicalSchemaModel(BaseModel):
     def apply_change(self, *_args, **_kwargs) -> None:
         raise NotImplementedError("Schema mutation not implemented yet.")
 
-
-#example uses for later
-# raw_tables = introspect_tables_and_columns(conn)
-# pk_map = introspect_primary_keys(conn)
-# fk_list = introspect_foreign_keys(conn)
-# model = CanonicalSchemaModel.from_introspection(raw_tables, pk_map, fk_list)
-# api_payload = model.to_dict_for_api()
