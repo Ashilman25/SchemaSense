@@ -1,6 +1,6 @@
 from typing import Optional
 from app.models.schema_model import CanonicalSchemaModel
-from app.schema.instrospect import introspect_tables_and_columns, introspect_primary_keys, introspect_foreign_keys
+from app.schema.introspect import introspect_tables_and_columns, introspect_primary_keys, introspect_foreign_keys
 
 
 _schema_cache: Optional[CanonicalSchemaModel] = None
