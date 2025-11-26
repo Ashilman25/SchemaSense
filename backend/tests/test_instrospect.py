@@ -7,7 +7,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.append(str(BACKEND_ROOT))
 
-from app.schema.instrospect import introspect_tables_and_columns, introspect_primary_keys, introspect_foreign_keys
+from app.schema.introspect import introspect_tables_and_columns, introspect_primary_keys, introspect_foreign_keys
 
 
 class FakeCursor:
