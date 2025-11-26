@@ -94,8 +94,29 @@ class CanonicalSchemaModel(BaseModel):
 
     #turn model -> json dict or other for api
     def to_dict_for_api(self) -> dict:
-        raise NotImplementedError("Schema serialization not implemented yet.")
+        api_data = {
+            "tables" : [
+                {
+                    "schema" : t.schema,
+                    "name" : t.name,
+                    "columns" : [c.model_dump() for c in t.columns],
+                }
+                for t in self.tables.values()
+            ],
+            "relationships" : [r.model_dump() for r in self.relationships],
+        }
+        
+        return api_data
+        
 
     #change the model according to schema edits
     def apply_change(self, *_args, **_kwargs) -> None:
         raise NotImplementedError("Schema mutation not implemented yet.")
+
+
+#example uses for later
+# raw_tables = introspect_tables_and_columns(conn)
+# pk_map = introspect_primary_keys(conn)
+# fk_list = introspect_foreign_keys(conn)
+# model = CanonicalSchemaModel.from_introspection(raw_tables, pk_map, fk_list)
+# api_payload = model.to_dict_for_api()
