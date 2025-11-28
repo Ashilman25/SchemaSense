@@ -1,8 +1,13 @@
 import React from 'react'
 import AppLayout from './components/layout/AppLayout'
+import { ThemeProvider } from './context/ThemeContext'
 
 function App() {
-  return <AppLayout />
+  return (
+    <ThemeProvider>
+      <AppLayout />
+    </ThemeProvider>
+  )
 }
 
 export default App
