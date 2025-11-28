@@ -2,6 +2,7 @@ import React from 'react'
 import TopNavBar from './TopNavBar'
 import QueryBuilderPanel from '../panels/QueryBuilderPanel'
 import SQLResultsPanel from '../panels/SQLResultsPanel'
+import SchemaExplorerPanel from '../panels/SchemaExplorerPanel'
 
 
 const AppLayout = () => {
@@ -25,7 +26,7 @@ const AppLayout = () => {
 
           {/* right panel */}
           <div className = "col-span-4 overflow-auto">
-            <p>schema panel</p>
+            <SchemaExplorerPanel />
           </div>
 
         </div>
