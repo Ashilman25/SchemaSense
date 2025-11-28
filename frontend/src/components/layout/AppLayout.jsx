@@ -1,6 +1,7 @@
 import React from 'react'
 import TopNavBar from './TopNavBar'
 import QueryBuilderPanel from '../panels/QueryBuilderPanel'
+import SQLResultsPanel from '../panels/SQLResultsPanel'
 
 
 const AppLayout = () => {
@@ -19,7 +20,7 @@ const AppLayout = () => {
 
           {/* middle panel */}
           <div className = "col-span-5 overflow-auto">
-            <p>sql results panel</p>
+            <SQLResultsPanel />
           </div>
 
           {/* right panel */}
