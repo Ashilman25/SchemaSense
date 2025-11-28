@@ -14,6 +14,18 @@ const TopNavBar = () => {
                     <h1 className = "text-xl font-bold text-gray-800">SchemaSense</h1>
                 </div>
 
+                {/* center and right side */}
+                <div className = "flex items-center space-x-4">
+                    <div className = "flex items-center space-x-2 px-3 py-1.5 bg-gray-100 rounded-lg">
+                        <div className = "w-2 h-2 bg-red-500 rounded-full"></div>
+                        <span className = "text-sm text-gray-600">Not Connected</span>
+                    </div>
+
+
+
+
+                </div>
+
 
 
 
