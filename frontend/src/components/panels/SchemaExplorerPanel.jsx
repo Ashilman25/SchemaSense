@@ -30,9 +30,34 @@ const SchemaExplorerPanel = () => {
                 </div>
             </div>
 
+            {/* tab content */}
+            <div className = "flex-1 p-4 overflow-auto">
+                {activeTab === 'tables' && (
+                    <div>
+                        <div className = "flex items-center justify-between mb-4">
+                            <h3 className = "text-sm font-medium text-gray-700">Schema Tables</h3>
+                            
+                            <button className = "text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded transition-colors">
+                                Refresh
+                            </button>
+                        </div>
+                        
+                        <div className = "text-sm text-gray-500">
+                            Connect to a database to view schema tables
+                        </div>
+                    </div>
+                )}
+                
+                {activeTab === 'er' && (
+                    <div className = "h-full flex items-center justify-center">
+                        <div className = "text-sm text-gray-500">
+                            Connect to a database to view ER diagram
+                        </div>
+                    </div>
+                )}
 
 
-
+            </div>
         </div>
     )
 
