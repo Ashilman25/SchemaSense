@@ -1,5 +1,6 @@
 import React from 'react'
 import TopNavBar from './TopNavBar'
+import QueryBuilderPanel from '../panels/QueryBuilderPanel'
 
 
 const AppLayout = () => {
@@ -13,7 +14,7 @@ const AppLayout = () => {
 
           {/* left panel */}
           <div className = "col-span-3 overflow-auto">
-            <p>quey builder panel</p>
+            <QueryBuilderPanel />
           </div>
 
           {/* middle panel */}
