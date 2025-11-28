@@ -1,20 +1,8 @@
 import React from 'react'
+import AppLayout from './components/layout/AppLayout'
 
 function App() {
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="container mx-auto p-8">
-
-        <h1 className="text-4xl font-bold text-gray-800 mb-4">
-          SchemaSense
-        </h1>
-
-      </div>
-    </div>
-
-
-
-  )
+  return <AppLayout />
 }
 
 export default App
