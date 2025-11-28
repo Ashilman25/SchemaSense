@@ -1,11 +1,12 @@
 import React from 'react'
+import TopNavBar from './TopNavBar'
 
 
 const AppLayout = () => {
   return (
     <div className = "h-screen flex flex-col bg-gray-50">
 
-      <p>nav bar</p>
+      <TopNavBar />
 
       <div className = "flex-1 overflow-hidden">
         <div className = "h-full grid grid-cols-12 gap-4 p-4">
