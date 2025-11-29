@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from app.nl_to_sql.openai_client import call_openai
 from app.nl_to_sql.service import build_prompt
 from app.nl_to_sql.validator import validate_and_normalize_sql, SQLValidationError
-from app.schema.cache import get_cached_schema
+from app.schema.cache import get_schema
 
 router = APIRouter(prefix="/api", tags=["nl"])
 logger = logging.getLogger(__name__)
@@ -21,8 +21,7 @@ def nl_to_sql(payload: NLRequest):
     SQL = None
 
     try:
-        model = get_cached_schema()
-
+        model = get_schema()
         prompt = build_prompt(question, model)
         raw_sql = call_openai(prompt)
         SQL, warnings = validate_and_normalize_sql(raw_sql, model)
