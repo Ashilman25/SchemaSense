@@ -1,4 +1,4 @@
-import React, {useState} from 'react'
+import {useState} from 'react'
 import TopNavBar from './TopNavBar'
 import QueryBuilderPanel from '../panels/QueryBuilderPanel'
 import SQLResultsPanel from '../panels/SQLResultsPanel'
@@ -6,6 +6,22 @@ import SchemaExplorerPanel from '../panels/SchemaExplorerPanel'
 
 
 const AppLayout = () => {
+  const [generatedSql, setGeneratedSql] = useState('');
+  const [sqlWarnings, setSqlWarnings] = useState([]);
+  const [nlQuestion, setNlQuestion] = useState('');
+
+  const handleSqlGenerated = (sql, warnings = []) => {
+    setGeneratedSql(sql);
+    setSqlWarnings(warnings);
+  };
+
+  const handleQuestionChange = (question) => {
+    setNlQuestion(question);
+  };
+
+  const handleAskAboutTable = (tableName) => {
+    setNlQuestion(`Show me some basic information from ${tableName}`);
+  };
 
   return (
     <div className = "h-screen flex flex-col bg-gray-50 dark:bg-slate-900 transition-colors">
@@ -17,17 +33,26 @@ const AppLayout = () => {
 
           {/* left panel */}
           <div className = "col-span-3 overflow-auto">
-            <QueryBuilderPanel />
+            <QueryBuilderPanel
+              onSqlGenerated = {handleSqlGenerated}
+              question = {nlQuestion}
+              onQuestionChange = {handleQuestionChange}
+            />
           </div>
 
           {/* middle panel */}
           <div className = "col-span-5 overflow-auto">
-            <SQLResultsPanel />
+            <SQLResultsPanel
+              generatedSql = {generatedSql}
+              warnings = {sqlWarnings}
+            />
           </div>
 
           {/* right panel */}
           <div className = "col-span-4 overflow-auto">
-            <SchemaExplorerPanel />
+            <SchemaExplorerPanel
+              onAskAboutTable = {handleAskAboutTable}
+            />
           </div>
 
         </div>
