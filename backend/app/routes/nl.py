@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from app.nl_to_sql.openai_client import call_openai
 from app.nl_to_sql.service import build_prompt
 from app.nl_to_sql.validator import validate_and_normalize_sql, SQLValidationError
-from app.schema.cache import get_cached_schema
+from app.schema.cache import get_schema
 
 router = APIRouter(prefix="/api", tags=["nl"])
 logger = logging.getLogger(__name__)
@@ -21,8 +21,7 @@ def nl_to_sql(payload: NLRequest):
     SQL = None
 
     try:
-        model = get_cached_schema()
-
+        model = get_schema()
         prompt = build_prompt(question, model)
         raw_sql = call_openai(prompt)
         SQL, warnings = validate_and_normalize_sql(raw_sql, model)
@@ -74,3 +73,18 @@ def nl_to_sql(payload: NLRequest):
             }
         )
 
+
+
+#to test
+# 1. Start the database
+# docker start schemasense-postgres
+
+# 2. Configure the database connection
+#curl -X POST http://127.0.0.1:8000/api/config/db \
+#  -H "Content-Type: application/json" \
+#  -d '{"host": "localhost", "port": 5432, "dbname": "schemasense", "user": "schemasense", "password": "schemasense_dev"}'
+
+# 3. Now you can use the nl-to-sql endpoint
+#curl -X POST http://127.0.0.1:8000/api/nl-to-sql \
+#  -H "Content-Type: application/json" \
+#  -d '{"question": "show me all customers"}'

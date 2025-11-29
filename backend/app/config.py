@@ -9,9 +9,9 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["http://localhost:5173"]
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_prefix="SCHEMASENSE_",
-        case_sensitive=False,
+        env_file = ".env",
+        env_prefix = "SCHEMASENSE_",
+        case_sensitive = False,
     )
 
 
