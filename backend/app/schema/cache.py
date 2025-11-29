@@ -6,6 +6,7 @@ from app.schema.introspect import introspect_tables_and_columns, introspect_prim
 _schema_cache: Optional[CanonicalSchemaModel] = None
 
 
+#for like if statements
 def get_cached_schema() -> Optional[CanonicalSchemaModel]:
     return _schema_cache
 
@@ -33,9 +34,21 @@ def refresh_schema(conn) -> CanonicalSchemaModel:
     return schema_model
 
 
+#when already doing other db work
 def get_or_refresh_schema(conn) -> CanonicalSchemaModel:
     cached = get_cached_schema()
     if cached is not None:
         return cached
 
     return refresh_schema(conn)
+
+
+#when need schema
+def get_schema() -> CanonicalSchemaModel:
+    cached = get_cached_schema()
+    if cached is not None:
+        return cached
+
+    from app.db import get_connection
+    with get_connection() as conn:
+        return refresh_schema(conn)
