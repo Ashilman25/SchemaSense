@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -8,9 +9,16 @@ from app.routes import config, history, nl, schema, sql
 
 # Easiest for testing: Just run SQL commands directly:
     # docker exec schemasense-postgres psql -U schemasense -d schemasense -c "YOUR SQL HERE"
-    
+
 # Best for permanent data: Create a file like infra/sql/init-mydata.sql and restart the container. For large imports: Use pg_dump from your existing DB and import with:
     # docker exec -i schemasense-postgres psql -U schemasense -d schemasense < yourfile.sql
+
+
+logging.basicConfig(
+    level = logging.INFO,
+    format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt = '%Y-%m-%d %H:%M:%S'
+)
 
 settings = get_settings()
 app = FastAPI()
