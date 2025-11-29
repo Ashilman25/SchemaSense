@@ -2,6 +2,10 @@ from openai import OpenAI
 
 client = OpenAI()
 
+#openai doc
+#system message = the AI's identity
+#user message = what its just doing
+
 def call_openai(prompt: str) -> str:
     response = client.chat.completions.create(
         model = "gpt-4o-mini",  
