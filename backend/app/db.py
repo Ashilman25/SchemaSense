@@ -7,8 +7,8 @@ class DatabaseConfig(BaseModel):
     host: str = "localhost"
     port: int = 5432
     dbname: str = "schemasense"
-    user: str = "postgres"
-    password: str = "postgres"
+    user: str = "schemasense"
+    password: str = "schemasense_dev"
 
 
 _active_config: Optional[DatabaseConfig] = None
