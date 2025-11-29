@@ -73,3 +73,18 @@ def nl_to_sql(payload: NLRequest):
             }
         )
 
+
+
+#to test
+# 1. Start the database
+# docker start schemasense-postgres
+
+# 2. Configure the database connection
+#curl -X POST http://127.0.0.1:8000/api/config/db \
+#  -H "Content-Type: application/json" \
+#  -d '{"host": "localhost", "port": 5432, "dbname": "schemasense", "user": "schemasense", "password": "schemasense_dev"}'
+
+# 3. Now you can use the nl-to-sql endpoint
+#curl -X POST http://127.0.0.1:8000/api/nl-to-sql \
+#  -H "Content-Type: application/json" \
+#  -d '{"question": "show me all customers"}'
