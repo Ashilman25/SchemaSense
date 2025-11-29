@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from "react";
 import { schemaAPI } from "../../utils/api";
 
-const SchemaExplorerPanel = () => {
+const SchemaExplorerPanel = ({ onAskAboutTable }) => {
     const [activeTab, setActiveTab] = useState('tables')
     const [schema, setSchema] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -79,8 +79,8 @@ const SchemaExplorerPanel = () => {
                             className = "border border-gray-200 dark:border-slate-600 rounded-lg overflow-hidden"
                         >
                             {/* Table header */}
-                            <button onClick={() => toggleTable(tableKey)} className = "w-full px-3 py-2 bg-gray-50 dark:bg-slate-700/50 hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center justify-between transition-colors">
-                                <div className = "flex items-center space-x-2">
+                            <div className = "w-full px-3 py-2 bg-gray-50 dark:bg-slate-700/50 flex items-center justify-between">
+                                <button onClick={() => toggleTable(tableKey)} className = "flex items-center space-x-2 flex-1 hover:bg-gray-100 dark:hover:bg-slate-700 -mx-3 -my-2 px-3 py-2 transition-colors">
                                     <svg
                                         className = {`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                                         fill = "none"
@@ -97,13 +97,27 @@ const SchemaExplorerPanel = () => {
                                     <span className = "text-xs text-gray-500 dark:text-gray-400">
                                         ({table.schema})
                                     </span>
-                                </div>
 
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                    {table.columns.length} column{table.columns.length !== 1 ? 's' : ''}
-                                </span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto">
+                                        {table.columns.length} column{table.columns.length !== 1 ? 's' : ''}
+                                    </span>
+                                </button>
 
-                            </button>
+                                {/* Ask about this table button */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onAskAboutTable(tableKey);
+                                    }}
+                                    className = "ml-2 text-xs bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-800/50 text-blue-700 dark:text-blue-300 px-2 py-1 rounded transition-colors flex items-center space-x-1"
+                                    title="Ask about this table"
+                                >
+                                    <svg className = "w-3 h-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>Ask</span>
+                                </button>
+                            </div>
 
                             {/* Columns list */}
                             {isExpanded && (
