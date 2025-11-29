@@ -1,15 +1,21 @@
-import {useState} from 'react';
+import {useState, useEffect} from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import {sql} from '@codemirror/lang-sql';
 import {oneDark} from '@codemirror/theme-one-dark';
 import {useTheme} from '../../context/ThemeContext';
 
-const SQLResultsPanel = () => {
+const SQLResultsPanel = ({ generatedSql, warnings }) => {
     const {theme} = useTheme();
     const [activeTab, setActiveTab] = useState('query');
     const [querySql, setQuerySql] = useState('-- Your generated SQL will appear here');
     const [schemaSql, setSchemaSql] = useState('-- Schema DDL will appear here once connected');
     const [isEditable, setIsEditable] = useState(false);
+
+    useEffect(() => {
+        if (generatedSql) {
+            setQuerySql(generatedSql);
+        }
+    }, [generatedSql]);
 
     return (
         <div className = "h-full bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col transition-colors">
