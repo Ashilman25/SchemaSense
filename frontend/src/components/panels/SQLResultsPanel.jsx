@@ -3,6 +3,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import {sql} from '@codemirror/lang-sql';
 import {oneDark} from '@codemirror/theme-one-dark';
 import {useTheme} from '../../context/ThemeContext';
+import {format} from 'sql-formatter';
 
 const SQLResultsPanel = ({ generatedSql, warnings }) => {
     const {theme} = useTheme();
@@ -13,7 +14,19 @@ const SQLResultsPanel = ({ generatedSql, warnings }) => {
 
     useEffect(() => {
         if (generatedSql) {
-            setQuerySql(generatedSql);
+            try {
+                const formattedSql = format(generatedSql, {
+                    language: 'postgresql',
+                    tabWidth: 2,
+                    keywordCase: 'upper',
+                    linesBetweenQueries: 2,
+                });
+                setQuerySql(formattedSql);
+
+            } catch (error) {
+                console.error('SQL formatting error:', error);
+                setQuerySql(generatedSql);
+            }
         }
     }, [generatedSql]);
 
