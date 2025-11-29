@@ -1,8 +1,41 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useTheme } from "../../context/ThemeContext";
+import DBConfigModal from "../modals/DBConfigModal";
+import { dbConfigAPI } from "../../utils/api";
 
 const TopNavBar = () => {
-    const { theme, toggleTheme } = useTheme();
+    const {theme, toggleTheme} = useTheme();
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isConnected, setIsConnected] = useState(false);
+
+
+    useEffect(() => {
+        checkConnectionStatus();
+    }, []);
+
+    const checkConnectionStatus = async () => {
+
+        try {
+            const response = await dbConfigAPI.getStatus();
+            setIsConnected(response.connected)
+        } catch (error) {
+            console.error('Failed to check connection status: ', error);
+            setIsConnected(false);
+        }
+
+    };
+
+    const handleConnectionSuccess = () => {
+        setIsConnected(true);
+    };
+
+    const handleOpenModal = () => {
+        setIsModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+    };
 
     return (
         <nav className = "bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 shadow-sm transition-colors">
@@ -19,9 +52,12 @@ const TopNavBar = () => {
 
                 {/* center and right side */}
                 <div className = "flex items-center space-x-4">
-                    <div className = "flex items-center space-x-2 px-3 py-1.5 bg-gray-100 dark:bg-slate-700 rounded-lg">
-                        <div className = "w-2 h-2 bg-red-500 rounded-full"></div>
-                        <span className = "text-sm text-gray-600 dark:text-gray-300">Not Connected</span>
+
+                    <div className = {`flex items-center space-x-2 px-3 py-1.5 rounded-lg ${isConnected ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-100 dark:bg-slate-700'}`}>
+                        <div className = {`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                        <span className = {`text-sm ${isConnected ? 'text-green-700 dark:text-green-400' : 'text-gray-600 dark:text-gray-300'}`}>
+                            {isConnected ? 'Connected' : 'Not Connected'}
+                        </span>
                     </div>
 
 
@@ -52,26 +88,32 @@ const TopNavBar = () => {
                         )}
                     </button>
 
-                    <button className = "p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors" title = "Database Settings">
+                    <button
+                        onClick = {handleOpenModal}
+                        className = "p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                        title = "Database Settings"
+                    >
                         <svg className = "w-6 h-6 text-gray-600 dark:text-gray-300" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
-                            <path 
+                            <path
                                 strokeLinecap = "round"
                                 strokeLinejoin = "round"
                                 strokeWidth = {2}
-                                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                                d = "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
                             />
-                            <path 
+                            <path
                                 strokeLinecap = "round"
                                 strokeLinejoin = "round"
                                 strokeWidth = {2}
-                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                d = "M15 12a3 3 0 11-6 0 3 3 0 016 0z"
                             />
                         </svg>
-
                     </button>
 
                 </div>
             </div>
+
+
+            <DBConfigModal isOpen = {isModalOpen} onClose = {handleCloseModal} onConnectionSuccess = {handleConnectionSuccess}/>
         </nav>
     )
 

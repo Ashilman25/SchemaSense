@@ -30,6 +30,8 @@ export const apiRequest = async (endpoint, options = {}) => {
 
 export const dbConfigAPI = {
 
+  //on success returns: {success:, message:}
+  //on fail returns: {success:, message:, error }
   testAndSave: async (config) => {
     return apiRequest('/api/config/db', {
       method: 'POST',
@@ -43,7 +45,7 @@ export const dbConfigAPI = {
     });
   },
 
-
+  //returns: {connected:}
   getStatus: async () => {
     return apiRequest('/api/config/db', {
       method: 'GET',
@@ -54,6 +56,7 @@ export const dbConfigAPI = {
 
 export const schemaAPI = {
 
+  //returns: {tables: [schema, name, columns], relationships: []}
   getSchema: async () => {
     return apiRequest('/api/schema', {
       method: 'GET',
