@@ -1,11 +1,16 @@
 from openai import OpenAI
+from app.config import get_settings
 
-client = OpenAI()
+settings = get_settings()
+if not settings.openai_api_key:
+    raise RuntimeError("OPENAI API key not configured.")
+
+client = OpenAI(api_key = settings.openai_api_key)
+
 
 #openai doc
 #system message = the AI's identity
 #user message = what its just doing
-
 def call_openai(prompt: str) -> str:
     response = client.chat.completions.create(
         model = "gpt-4o-mini",  
