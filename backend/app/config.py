@@ -1,8 +1,3 @@
-# define a settings class (pydantic BaseSettings), 
-# placeholder fields for DB URL, OpenAI key, environment flags, 
-# and a singleton helper like get_settings() that just returns default 
-# values for now.
-
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
