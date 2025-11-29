@@ -1,7 +1,151 @@
-import React, {useState} from "react";
+import React, {useState, useEffect} from "react";
+import { schemaAPI } from "../../utils/api";
 
 const SchemaExplorerPanel = () => {
     const [activeTab, setActiveTab] = useState('tables')
+    const [schema, setSchema] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [expandedTables, setExpandedTables] = useState(new Set());
+
+    useEffect(() => {
+        fetchSchema();
+    }, []);
+
+    const fetchSchema = async () => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            const data = await schemaAPI.getSchema();
+            setSchema(data);
+
+        } catch (err) {
+            console.error('Failed to fetch schema:', err);
+            setError(err.message || 'Failed to load schema');
+
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const toggleTable = (tableKey) => {
+        const newExpanded = new Set(expandedTables);
+
+        if (newExpanded.has(tableKey)) {
+            newExpanded.delete(tableKey);
+
+        } else {
+            newExpanded.add(tableKey);
+        }
+
+        setExpandedTables(newExpanded);
+    };
+
+    const renderTablesList = () => {
+        if (loading) {
+            return (
+                <div className = "flex items-center justify-center py-8">
+                    <div className = "text-sm text-gray-500 dark:text-gray-400">Loading schema...</div>
+                </div>
+            );
+        }
+
+        if (error) {
+            return (
+                <div className = "text-sm text-red-600 dark:text-red-400 p-3 bg-red-50 dark:bg-red-900/20 rounded">
+                    {error}
+                </div>
+            );
+        }
+
+        if (!schema || !schema.tables || schema.tables.length === 0) {
+            return (
+                <div className = "text-sm text-gray-500 dark:text-gray-400">
+                    Connect to a database to view schema tables
+                </div>
+            );
+        }
+
+        return (
+            <div className = "space-y-2">
+                {schema.tables.map((table) => {
+                    const tableKey = `${table.schema}.${table.name}`;
+                    const isExpanded = expandedTables.has(tableKey);
+
+                    return (
+                        <div
+                            key = {tableKey}
+                            className = "border border-gray-200 dark:border-slate-600 rounded-lg overflow-hidden"
+                        >
+                            {/* Table header */}
+                            <button onClick={() => toggleTable(tableKey)} className = "w-full px-3 py-2 bg-gray-50 dark:bg-slate-700/50 hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center justify-between transition-colors">
+                                <div className = "flex items-center space-x-2">
+                                    <svg
+                                        className = {`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                                        fill = "none"
+                                        stroke = "currentColor"
+                                        viewBox = "0 0 24 24"
+                                    >
+                                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M9 5l7 7-7 7" />
+                                    </svg>
+
+                                    <span className = "text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        {table.name}
+                                    </span>
+
+                                    <span className = "text-xs text-gray-500 dark:text-gray-400">
+                                        ({table.schema})
+                                    </span>
+                                </div>
+
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    {table.columns.length} column{table.columns.length !== 1 ? 's' : ''}
+                                </span>
+
+                            </button>
+
+                            {/* Columns list */}
+                            {isExpanded && (
+                                <div className = "bg-white dark:bg-slate-800">
+                                    <div className = "px-3 py-2 space-y-1">
+                                        {table.columns.map((column, idx) => (
+                                            <div key = {idx} className = "flex items-center justify-between py-1.5 px-2 hover:bg-gray-50 dark:hover:bg-slate-700/50 rounded transition-colors">
+                                                <div className = "flex items-center space-x-2 flex-1">
+                                                    <span className = "text-sm text-gray-700 dark:text-gray-300 font-mono">
+                                                        {column.name}
+                                                    </span>
+
+                                                    <div className = "flex items-center space-x-1">
+                                                        {column.is_pk && (
+                                                            <span className = "text-xs px-1.5 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded font-medium" title ="Primary Key">
+                                                                PK
+                                                            </span>
+                                                        )}
+                                                        {column.is_fk && (
+                                                            <span className = "text-xs px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded font-medium" title = "Foreign Key">
+                                                                FK
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                </div>
+
+                                                <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                                                    {column.type}
+                                                </span>
+
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
 
     return (
         <div className = "h-full bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col transition-colors">
@@ -37,14 +181,16 @@ const SchemaExplorerPanel = () => {
                         <div className = "flex items-center justify-between mb-4">
                             <h3 className = "text-sm font-medium text-gray-700 dark:text-gray-300">Schema Tables</h3>
 
-                            <button className = "text-xs bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1 rounded transition-colors">
-                                Refresh
+                            <button
+                                onClick={fetchSchema}
+                                disabled={loading}
+                                className = "text-xs bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {loading ? 'Refreshing...' : 'Refresh'}
                             </button>
                         </div>
 
-                        <div className = "text-sm text-gray-500 dark:text-gray-400">
-                            Connect to a database to view schema tables
-                        </div>
+                        {renderTablesList()}
                     </div>
                 )}
 

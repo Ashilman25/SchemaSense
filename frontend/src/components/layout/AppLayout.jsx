@@ -1,4 +1,4 @@
-import React from 'react'
+import React, {useState} from 'react'
 import TopNavBar from './TopNavBar'
 import QueryBuilderPanel from '../panels/QueryBuilderPanel'
 import SQLResultsPanel from '../panels/SQLResultsPanel'
@@ -6,6 +6,7 @@ import SchemaExplorerPanel from '../panels/SchemaExplorerPanel'
 
 
 const AppLayout = () => {
+
   return (
     <div className = "h-screen flex flex-col bg-gray-50 dark:bg-slate-900 transition-colors">
 

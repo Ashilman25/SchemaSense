@@ -6,6 +6,12 @@ from app.routes import config, history, nl, schema, sql
 
 #python -m uvicorn app.main:app --reload
 
+# Easiest for testing: Just run SQL commands directly:
+    # docker exec schemasense-postgres psql -U schemasense -d schemasense -c "YOUR SQL HERE"
+    
+# Best for permanent data: Create a file like infra/sql/init-mydata.sql and restart the container. For large imports: Use pg_dump from your existing DB and import with:
+    # docker exec -i schemasense-postgres psql -U schemasense -d schemasense < yourfile.sql
+
 settings = get_settings()
 app = FastAPI()
 
