@@ -1,16 +1,23 @@
 import React, {useState, useEffect} from "react";
 import { schemaAPI } from "../../utils/api";
 
-const SchemaExplorerPanel = ({ onAskAboutTable }) => {
+const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger }) => {
     const [activeTab, setActiveTab] = useState('tables')
     const [schema, setSchema] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [expandedTables, setExpandedTables] = useState(new Set());
 
+    // Fetch schema when DB is connected or refresh is triggered
     useEffect(() => {
-        fetchSchema();
-    }, []);
+        if (isDbConnected) {
+            fetchSchema();
+        } else {
+            // Clear schema and error when DB is disconnected
+            setSchema(null);
+            setError(null);
+        }
+    }, [isDbConnected, refreshTrigger]);
 
     const fetchSchema = async () => {
         setLoading(true);
@@ -43,6 +50,22 @@ const SchemaExplorerPanel = ({ onAskAboutTable }) => {
     };
 
     const renderTablesList = () => {
+        if (!isDbConnected) {
+            return (
+                <div className = "flex flex-col items-center justify-center py-8 px-4 text-center">
+                    <svg className = "w-12 h-12 text-gray-400 dark:text-gray-500 mb-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                    </svg>
+                    <p className = "text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        No database connected
+                    </p>
+                    <p className = "text-xs text-gray-500 dark:text-gray-500">
+                        Click the settings icon in the top right to connect to a database
+                    </p>
+                </div>
+            );
+        }
+
         if (loading) {
             return (
                 <div className = "flex items-center justify-center py-8">
@@ -62,7 +85,7 @@ const SchemaExplorerPanel = ({ onAskAboutTable }) => {
         if (!schema || !schema.tables || schema.tables.length === 0) {
             return (
                 <div className = "text-sm text-gray-500 dark:text-gray-400">
-                    Connect to a database to view schema tables
+                    No tables found in this database
                 </div>
             );
         }
@@ -192,17 +215,19 @@ const SchemaExplorerPanel = ({ onAskAboutTable }) => {
             <div className = "flex-1 p-4 overflow-auto">
                 {activeTab === 'tables' && (
                     <div>
-                        <div className = "flex items-center justify-between mb-4">
-                            <h3 className = "text-sm font-medium text-gray-700 dark:text-gray-300">Schema Tables</h3>
+                        {isDbConnected && (
+                            <div className = "flex items-center justify-between mb-4">
+                                <h3 className = "text-sm font-medium text-gray-700 dark:text-gray-300">Schema Tables</h3>
 
-                            <button
-                                onClick={fetchSchema}
-                                disabled={loading}
-                                className = "text-xs bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {loading ? 'Refreshing...' : 'Refresh'}
-                            </button>
-                        </div>
+                                <button
+                                    onClick={fetchSchema}
+                                    disabled={loading}
+                                    className = "text-xs bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {loading ? 'Refreshing...' : 'Refresh'}
+                                </button>
+                            </div>
+                        )}
 
                         {renderTablesList()}
                     </div>
@@ -210,9 +235,23 @@ const SchemaExplorerPanel = ({ onAskAboutTable }) => {
 
                 {activeTab === 'er' && (
                     <div className = "h-full flex items-center justify-center">
-                        <div className = "text-sm text-gray-500 dark:text-gray-400">
-                            Connect to a database to view ER diagram
-                        </div>
+                        {!isDbConnected ? (
+                            <div className = "flex flex-col items-center justify-center py-8 px-4 text-center">
+                                <svg className = "w-12 h-12 text-gray-400 dark:text-gray-500 mb-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                                </svg>
+                                <p className = "text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                    No database connected
+                                </p>
+                                <p className = "text-xs text-gray-500 dark:text-gray-500">
+                                    Click the settings icon in the top right to connect to a database
+                                </p>
+                            </div>
+                        ) : (
+                            <div className = "text-sm text-gray-500 dark:text-gray-400">
+                                ER diagram view coming soon
+                            </div>
+                        )}
                     </div>
                 )}
 
