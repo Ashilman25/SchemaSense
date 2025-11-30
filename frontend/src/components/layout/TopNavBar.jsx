@@ -3,7 +3,7 @@ import { useTheme } from "../../context/ThemeContext";
 import DBConfigModal from "../modals/DBConfigModal";
 import { dbConfigAPI } from "../../utils/api";
 
-const TopNavBar = () => {
+const TopNavBar = ({ onConnectionChange }) => {
     const {theme, toggleTheme} = useTheme();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
@@ -14,19 +14,29 @@ const TopNavBar = () => {
     }, []);
 
     const checkConnectionStatus = async () => {
-
         try {
             const response = await dbConfigAPI.getStatus();
-            setIsConnected(response.connected)
+            const connected = response.connected || false;
+            setIsConnected(connected);
+
+            if (onConnectionChange) {
+                onConnectionChange(connected);
+            }
+
         } catch (error) {
             console.error('Failed to check connection status: ', error);
             setIsConnected(false);
+            if (onConnectionChange) {
+                onConnectionChange(false);
+            }
         }
-
     };
 
     const handleConnectionSuccess = () => {
         setIsConnected(true);
+        if (onConnectionChange) {
+            onConnectionChange(true);
+        }
     };
 
     const handleOpenModal = () => {

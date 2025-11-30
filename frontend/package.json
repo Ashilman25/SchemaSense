@@ -18,7 +18,8 @@
     "react-dom": "^18.2.0",
     "react-flow-renderer": "^10.3.17",
     "react-router-dom": "^6.21.0",
-    "reactflow": "^11.10.4"
+    "reactflow": "^11.10.4",
+    "sql-formatter": "^15.6.10"
   },
   "devDependencies": {
     "@types/react": "^18.2.48",
