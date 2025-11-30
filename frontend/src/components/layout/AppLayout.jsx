@@ -10,6 +10,9 @@ const AppLayout = () => {
   const [sqlWarnings, setSqlWarnings] = useState([]);
   const [nlQuestion, setNlQuestion] = useState('');
 
+  const [isDbConnected, setIsDbConnected] = useState(false);
+  const [shouldRefreshSchema, setShouldRefreshSchema] = useState(0);
+
   const handleSqlGenerated = (sql, warnings = []) => {
     setGeneratedSql(sql);
     setSqlWarnings(warnings);
@@ -23,10 +26,17 @@ const AppLayout = () => {
     setNlQuestion(`Show me some basic information from ${tableName}`);
   };
 
+  const handleDbConnectionChange = (connected) => {
+    setIsDbConnected(connected);
+    if (connected) {
+      setShouldRefreshSchema(prev => prev + 1);
+    }
+  };
+
   return (
     <div className = "h-screen flex flex-col bg-gray-50 dark:bg-slate-900 transition-colors">
 
-      <TopNavBar />
+      <TopNavBar onConnectionChange = {handleDbConnectionChange} />
 
       <div className = "flex-1 overflow-hidden">
         <div className = "h-full grid grid-cols-12 gap-4 p-4">
@@ -52,6 +62,8 @@ const AppLayout = () => {
           <div className = "col-span-4 overflow-auto">
             <SchemaExplorerPanel
               onAskAboutTable = {handleAskAboutTable}
+              isDbConnected = {isDbConnected}
+              refreshTrigger = {shouldRefreshSchema}
             />
           </div>
 
