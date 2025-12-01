@@ -167,6 +167,7 @@ const ERDiagram = ({schema}) => {
                 <Controls showInteractive = {false} className = "bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg" />
 
                 <MiniMap 
+                    style = {{width: 120, height: 80}} //default 200x150
                     nodeColor = {nodeColor}
                     nodeStrokeWidth = {3}
                     zoomable

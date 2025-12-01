@@ -1,5 +1,6 @@
 import React, {useState, useEffect} from "react";
 import { schemaAPI } from "../../utils/api";
+import ERDiagram from "../diagram/ERDiagram";
 
 const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger }) => {
     const [activeTab, setActiveTab] = useState('tables')
@@ -8,15 +9,15 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
     const [error, setError] = useState(null);
     const [expandedTables, setExpandedTables] = useState(new Set());
 
-    // Fetch schema when DB is connected or refresh is triggered
     useEffect(() => {
         if (isDbConnected) {
             fetchSchema();
+
         } else {
-            // Clear schema and error when DB is disconnected
             setSchema(null);
             setError(null);
         }
+
     }, [isDbConnected, refreshTrigger]);
 
     const fetchSchema = async () => {
@@ -234,9 +235,9 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
                 )}
 
                 {activeTab === 'er' && (
-                    <div className = "h-full flex items-center justify-center">
+                    <div className = "h-full">
                         {!isDbConnected ? (
-                            <div className = "flex flex-col items-center justify-center py-8 px-4 text-center">
+                            <div className = "flex flex-col items-center justify-center h-full py-8 px-4 text-center">
                                 <svg className = "w-12 h-12 text-gray-400 dark:text-gray-500 mb-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
                                     <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
                                 </svg>
@@ -247,10 +248,18 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
                                     Click the settings icon in the top right to connect to a database
                                 </p>
                             </div>
-                        ) : (
-                            <div className = "text-sm text-gray-500 dark:text-gray-400">
-                                ER diagram view coming soon
+                        ) : loading ? (
+                            <div className = "flex items-center justify-center h-full">
+                                <div className = "text-sm text-gray-500 dark:text-gray-400">Loading ER diagram...</div>
                             </div>
+                        ) : error ? (
+                            <div className = "flex items-center justify-center h-full">
+                                <div className = "text-sm text-red-600 dark:text-red-400 p-3 bg-red-50 dark:bg-red-900/20 rounded">
+                                    {error}
+                                </div>
+                            </div>
+                        ) : (
+                            <ERDiagram schema = {schema} />
                         )}
                     </div>
                 )}
