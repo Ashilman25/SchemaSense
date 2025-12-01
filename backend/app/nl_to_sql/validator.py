@@ -98,21 +98,32 @@ def _validate_schema_references(parsed: exp.Expression, schema_model: CanonicalS
 
 
     referenced_tables = set()
+    table_aliases = {}  
+
     for table_node in parsed.find_all(exp.Table):
         table_name = table_node.name.lower()
-        
+
         if table_node.db:
             full_name = f"{table_node.db.lower()}.{table_name}"
             referenced_tables.add(full_name)
-            
+            actual_table = full_name
         else:
             referenced_tables.add(table_name)
+            actual_table = table_name
+
+
+        if table_node.alias:
+            alias = table_node.alias.lower()
+            table_aliases[alias] = actual_table
+
+            if actual_table in table_to_columns:
+                table_to_columns[alias] = table_to_columns[actual_table]
 
 
         if table_name not in valid_tables:
             if table_node.db:
-                
                 full_name = f"{table_node.db}.{table_name}"
+                
                 if full_name.lower() not in valid_tables:
                     warnings.append(f"Table '{full_name}' not found in schema")
                     
