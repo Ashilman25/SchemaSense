@@ -5,6 +5,7 @@ import {oneDark} from '@codemirror/theme-one-dark';
 import {useTheme} from '../../context/ThemeContext';
 import {format} from 'sql-formatter';
 import { sqlAPI } from '../../utils/api';
+import QueryPlanVisualization from '../QueryPlanVisualization';
 
 
 const SQLResultsPanel = ({ generatedSql, warnings }) => {
@@ -17,6 +18,10 @@ const SQLResultsPanel = ({ generatedSql, warnings }) => {
     const [queryResults, setQueryResults] = useState(null);
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+
+    const [queryPlan, setQueryPlan] = useState(null);
+    const [planError, setPlanError] = useState('');
+    const [isPlanLoading, setIsPlanLoading] = useState(false);
 
     useEffect(() => {
         if (generatedSql) {
@@ -61,9 +66,37 @@ const SQLResultsPanel = ({ generatedSql, warnings }) => {
         } catch (err) {
             setError(err.message || 'Failed to execute query');
             setQueryResults(null);
-            
+
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handlePlanQuery = async () => {
+        if (!querySql.trim() || querySql.trim().startsWith('--')) {
+            setPlanError('Please enter a SQL query to generate plan for');
+            return;
+        }
+
+        setPlanError('');
+        setIsPlanLoading(true);
+        setQueryPlan(null);
+
+        try {
+            const response = await sqlAPI.getPlan(querySql);
+
+            if (response.error_type) {
+                setPlanError(response.message || 'Query plan generation failed');
+                setQueryPlan(null);
+            } else {
+                setQueryPlan(response);
+                setPlanError('');
+            }
+        } catch (err) {
+            setPlanError(err.message || 'Failed to generate query plan');
+            setQueryPlan(null);
+        } finally {
+            setIsPlanLoading(false);
         }
     };
 
@@ -82,6 +115,15 @@ const SQLResultsPanel = ({ generatedSql, warnings }) => {
                         }`}
                     >
                         Query SQL
+                    </button>
+
+                    <button
+                        onClick = {() => setActiveTab('plan')}
+                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                            activeTab === 'plan' ? 'border-blue-500 text-blue-600 dark:text-blue-400': 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                        }`}
+                    >
+                        Query Plan
                     </button>
 
                     <button
@@ -151,9 +193,9 @@ const SQLResultsPanel = ({ generatedSql, warnings }) => {
                                 `}
                             >
                                 {isLoading && (
-                                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    <svg className = "animate-spin h-4 w-4 text-white" xmlns = "http://www.w3.org/2000/svg" fill = "none" viewBox = "0 0 24 24">
+                                        <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
+                                        <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                     </svg>
                                 )}
                                 <span>{isLoading ? 'Running...' : 'Run Query'}</span>
@@ -285,6 +327,71 @@ const SQLResultsPanel = ({ generatedSql, warnings }) => {
                             )}
                         </div>
 
+                    </div>
+                )}
+
+                {activeTab === 'plan' && (
+                    <div className = "h-full flex flex-col">
+
+                        {/* plan button */}
+                        <div className = "mb-4">
+                            <button
+                                onClick = {handlePlanQuery}
+                                disabled = {isPlanLoading}
+                                className = {`
+                                    bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600
+                                    text-white font-medium py-2 px-4 rounded-lg transition-colors
+                                    flex items-center space-x-2
+                                    ${isPlanLoading ? 'opacity-50 cursor-not-allowed' : ''}
+                                `}
+                            >
+                                {isPlanLoading && (
+                                    <svg className = "animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill = "none" viewBox = "0 0 24 24">
+                                        <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
+                                        <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                )}
+                                <span>{isPlanLoading ? 'Generating Plan...' : 'Show Plan'}</span>
+                            </button>
+                        </div>
+
+                        {/* plan visuals area */}
+                        <div className = "flex-1 bg-gray-50 dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-600 overflow-hidden transition-colors">
+                            {/* error message*/}
+                            {planError && (
+                                <div className = "m-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                                    <div className = "flex items-start">
+                                        <svg className = "h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule = "evenodd" d = "M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                        </svg>
+                                        <div>
+                                            <h3 className = "text-sm font-medium text-red-800 dark:text-red-300">Plan Generation Error</h3>
+                                            <p className = "mt-1 text-sm text-red-700 dark:text-red-400">{planError}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* loading */}
+                            {isPlanLoading && !planError && (
+                                <div className = "flex-1 flex items-center justify-center p-8">
+                                    <div className = "text-center">
+                                        <svg className = "animate-spin h-8 w-8 text-purple-600 dark:text-purple-400 mx-auto mb-4" xmlns = "http://www.w3.org/2000/svg" fill = "none" viewBox = "0 0 24 24">
+                                            <circle className = "opacity-25" cx = "12" cy="12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
+                                            <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <p className = "text-sm text-gray-600 dark:text-gray-400">Generating query plan...</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/*plan visuals */}
+                            {!isPlanLoading && !planError && (
+                                <div className = "h-full">
+                                    <QueryPlanVisualization planData = {queryPlan} />
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 
