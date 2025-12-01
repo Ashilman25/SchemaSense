@@ -47,6 +47,7 @@ const AppLayout = () => {
               onSqlGenerated = {handleSqlGenerated}
               question = {nlQuestion}
               onQuestionChange = {handleQuestionChange}
+              isDbConnected = {isDbConnected}
             />
           </div>
 

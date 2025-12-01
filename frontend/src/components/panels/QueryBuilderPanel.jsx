@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { nlToSqlAPI } from "../../utils/api";
 
-const QueryBuilderPanel = ({ onSqlGenerated, question, onQuestionChange }) => {
+const QueryBuilderPanel = ({ onSqlGenerated, question, onQuestionChange, isDbConnected }) => {
     const placeholderHistory = [
         {
             id: 1,
@@ -30,6 +30,11 @@ const QueryBuilderPanel = ({ onSqlGenerated, question, onQuestionChange }) => {
             return;
         }
 
+        if (!isDbConnected) {
+            setError('Please connect to a database first. In top right settings.');
+            return;
+        }
+
         setError('');
         setWarnings([]);
         setIsLoading(true);
@@ -37,7 +42,6 @@ const QueryBuilderPanel = ({ onSqlGenerated, question, onQuestionChange }) => {
         try {
             const response = await nlToSqlAPI.generateSQL(question);
 
-            // On success, populate SQL editor and display warnings
             if (response.sql) {
                 onSqlGenerated(response.sql, response.warnings || []);
                 setWarnings(response.warnings || []);

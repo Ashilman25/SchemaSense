@@ -15,25 +15,25 @@ STRICT RULES:
 2. Only generate read-only SELECT queries
 3. NEVER generate destructive commands: DROP, DELETE, UPDATE, TRUNCATE, ALTER, INSERT, CREATE
 4. Prefer simple, clear queries that match the requested output
-5. Use proper table and column names as shown in the schema
+5. ALWAYS use fully-qualified table names (schema.table) as shown in the DATABASE SCHEMA above
 6. Include appropriate JOINs when querying multiple tables
 7. Return ONLY the SQL query without explanation or markdown formatting
 
 FEW-SHOT EXAMPLES:
 
 Question: "Show me all customers"
-SQL: SELECT * FROM customers;
+SQL: SELECT * FROM sales.customers;
 
 Question: "What are the names and emails of all users?"
-SQL: SELECT name, email FROM users;
+SQL: SELECT name, email FROM myapp.users;
 
 Question: "List all orders with customer names"
-SQL: SELECT orders.id, orders.order_date, customers.name
-FROM orders
-JOIN customers ON orders.customer_id = customers.id;
+SQL: SELECT o.id, o.order_date, c.name
+FROM sales.orders o
+JOIN sales.customers c ON o.customer_id = c.id;
 
 Question: "Count how many products we have"
-SQL: SELECT COUNT(*) FROM products;
+SQL: SELECT COUNT(*) FROM sales.products;
 
 NOW GENERATE SQL FOR THIS QUESTION:
 Question: "{question}"
