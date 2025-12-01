@@ -21,6 +21,7 @@ class Table(BaseModel):
     name: str
     schema: str = "public"
     columns: List[Column] = Field(default_factory=list)
+    row_count: int | None = None 
 
 
 class Relationship(BaseModel):
@@ -35,7 +36,7 @@ class CanonicalSchemaModel(BaseModel):
     relationships: List[Relationship] = Field(default_factory=list)
 
     @classmethod
-    def from_introspection(cls, tables_raw: dict, pks_raw: dict, fks_raw: list) -> "CanonicalSchemaModel":
+    def from_introspection(cls, tables_raw: dict, pks_raw: dict, fks_raw: list, row_counts_raw: dict = None) -> "CanonicalSchemaModel":
         tables_dict = {}
         relationships_list = []
 
@@ -70,9 +71,13 @@ class CanonicalSchemaModel(BaseModel):
                     nullable = nullable
                 ))
 
+            # Get row count if available
+            row_count = None
+            if row_counts_raw:
+                row_count = row_counts_raw.get(table_key)
 
-            table = Table(name = table_name, schema = schema_name, columns = columns)
-            
+            table = Table(name = table_name, schema = schema_name, columns = columns, row_count = row_count)
+
             fully_qualified_name = f"{schema_name}.{table_name}"
             tables_dict[fully_qualified_name] = table
 
@@ -100,12 +105,13 @@ class CanonicalSchemaModel(BaseModel):
                     "schema" : t.schema,
                     "name" : t.name,
                     "columns" : [c.model_dump() for c in t.columns],
+                    "row_count" : t.row_count,
                 }
                 for t in self.tables.values()
             ],
             "relationships" : [r.model_dump() for r in self.relationships],
         }
-        
+
         return api_data
         
 
