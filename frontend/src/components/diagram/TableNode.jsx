@@ -2,8 +2,8 @@ import {memo} from 'react';
 import {Handle, Position} from 'reactflow';
 
 //custom node for db tables
-const TableNode = memo(({data}) => {
-    const {tableName, schema, columns, isExpanded, onToggleExpand, nodeId} = data;
+const TableNode = memo(({data, selected}) => {
+    const {tableName, schema, columns, isExpanded, onToggleExpand, nodeId, onNodeClick} = data;
 
     const keyColumns = columns.filter(col => col.is_pk || col.is_fk);
     const nonKeyColumns = columns.filter(col => !col.is_pk && !col.is_fk);
@@ -11,7 +11,14 @@ const TableNode = memo(({data}) => {
     const displayColumns = isExpanded ? columns : keyColumns;
 
     return (
-        <div className = "bg-white dark:bg-slate-800 border-2 border-gray-300 dark:border-slate-600 rounded-lg shadow-lg min-w-[200px] max-w-[300px]">
+        <div
+            onClick={() => onNodeClick(nodeId)}
+            className={`bg-white dark:bg-slate-800 border-2 rounded-lg shadow-lg min-w-[200px] max-w-[300px] cursor-pointer transition-all ${
+                selected
+                    ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-300 dark:ring-blue-600'
+                    : 'border-gray-300 dark:border-slate-600 hover:border-blue-400 dark:hover:border-blue-500'
+            }`}
+        >
 
             <Handle type = "target" position = {Position.Top} className = "w-3 h-3 !bg-blue-500" />
             <Handle type = "source" position = {Position.Bottom} className = "w-3 h-3 !bg-blue-500" />
@@ -64,7 +71,7 @@ const TableNode = memo(({data}) => {
                     </div>
                 ) : (
                     <div className = "text-xs text-gray-500 dark:text-gray-400 italic text-center py-2">
-                        No columns 
+                        No relational keys (PKs or FKs) 
                     </div>
                 )}
 
