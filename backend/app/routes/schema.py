@@ -59,7 +59,7 @@ def get_sample_rows(table: str, limit: int = 10):
         rows = cursor.fetchall()
 
         columns = [desc[0] for desc in cursor.description]
-        row_data = [dict(zip(columns, row)) for row in rows] # zip makes key-value pairs using cols and rows
+        row_data = [list(row) for row in rows]
 
         return {
             "table": table,
