@@ -205,7 +205,7 @@ const QueryPlanVisualization = ({planData}) => {
           </p>
 
           <p className = "mt-1 text-xs text-gray-400 dark:text-gray-500">
-            Click "Show Plan" to generate a qery execution plan
+            Click "Show Plan" to generate a query execution plan
           </p>
 
         </div>
@@ -213,13 +213,37 @@ const QueryPlanVisualization = ({planData}) => {
     );
   }
 
+  return (
 
+    <div className = "h-full w-full">
+      <ReactFlow
+        nodes = {nodes}
+        edges = {edges}
+        onNodesChange = {onNodesChange}
+        onEdgesChange = {onEdgesChange}
+        onInit = {onInit}
+        nodeTypes = {nodeTypes}
+        defaultEdgeOptions = {defaultEdgeOptions}
+        fitView
+        attributionPosition = "bottom-left"
+        className = {theme === 'dark' ? 'bg-slate-900' : 'bg-gray-50'}
+      >
+        <Background 
+          color = {theme === 'dark' ? '#475569' : '#d1d5db'}
+          gap = {16}
+          size = {1}
+        />
 
+        <Controls className = {theme === 'dark' ? 'bg-slate-800' : 'bg-white'} />
 
+        <MiniMap
+          nodeColor = {theme === 'dark' ? '#3b82f6' : '#2563eb'}
+          className = {theme === 'dark' ? 'bg-slate-800' : 'bg-white'}
+        />
 
-
-
-
+      </ReactFlow>
+    </div>
+  );
 };
 
 export default QueryPlanVisualization;
