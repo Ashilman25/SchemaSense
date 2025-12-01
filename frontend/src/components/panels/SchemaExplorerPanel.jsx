@@ -1,5 +1,6 @@
 import React, {useState, useEffect} from "react";
 import { schemaAPI } from "../../utils/api";
+import ERDiagram from "../diagram/ERDiagram";
 
 const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger }) => {
     const [activeTab, setActiveTab] = useState('tables')
@@ -8,15 +9,17 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
     const [error, setError] = useState(null);
     const [expandedTables, setExpandedTables] = useState(new Set());
 
-    // Fetch schema when DB is connected or refresh is triggered
+    const [searchTerm, setSearchTerm] = useState('');
+
     useEffect(() => {
         if (isDbConnected) {
             fetchSchema();
+
         } else {
-            // Clear schema and error when DB is disconnected
             setSchema(null);
             setError(null);
         }
+
     }, [isDbConnected, refreshTrigger]);
 
     const fetchSchema = async () => {
@@ -47,6 +50,46 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
         }
 
         setExpandedTables(newExpanded);
+    };
+
+
+    const getFilteredTables = () => {
+        if (!schema || !schema.tables) return [];
+
+        return schema.tables.filter(table => {
+
+            if (searchTerm) {
+                const search = searchTerm.toLowerCase();
+                const tableName = table.name.toLowerCase();
+                const schemaName = table.schema.toLowerCase();
+                const fullName = `${schemaName}.${tableName}`;
+
+                return tableName.includes(search) ||
+                       schemaName.includes(search) ||
+                       fullName.includes(search);
+            }
+
+            return true;
+        });
+    };
+
+    const getFilteredSchema = () => {
+        if (!schema) return null;
+
+        const filteredTables = getFilteredTables();
+        const filteredTableKeys = new Set(
+            filteredTables.map(t => `${t.schema}.${t.name}`)
+        );
+
+
+        const filteredRelationships = schema.relationships?.filter(rel =>
+            filteredTableKeys.has(rel.from_table) && filteredTableKeys.has(rel.to_table)
+        ) || [];
+
+        return {
+            tables: filteredTables,
+            relationships: filteredRelationships
+        };
     };
 
     const renderTablesList = () => {
@@ -90,9 +133,28 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
             );
         }
 
+        const filteredTables = getFilteredTables();
+
+        if (filteredTables.length === 0) {
+            return (
+                <div className = "text-sm text-gray-500 dark:text-gray-400 text-center py-8">
+                    {searchTerm ? (
+                        <>
+                            <svg className = "w-10 h-10 mx-auto mb-2 text-gray-400 dark:text-gray-500" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            No tables match &quot;{searchTerm}&quot;
+                        </>
+                    ) : (
+                        'No tables to display'
+                    )}
+                </div>
+            );
+        }
+
         return (
             <div className = "space-y-2">
-                {schema.tables.map((table) => {
+                {filteredTables.map((table) => {
                     const tableKey = `${table.schema}.${table.name}`;
                     const isExpanded = expandedTables.has(tableKey);
 
@@ -216,16 +278,57 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
                 {activeTab === 'tables' && (
                     <div>
                         {isDbConnected && (
-                            <div className = "flex items-center justify-between mb-4">
-                                <h3 className = "text-sm font-medium text-gray-700 dark:text-gray-300">Schema Tables</h3>
+                            <div className = "space-y-3 mb-4">
+                                <div className = "flex items-center justify-between">
+                                    <h3 className = "text-sm font-medium text-gray-700 dark:text-gray-300">Schema Tables</h3>
 
-                                <button
-                                    onClick={fetchSchema}
-                                    disabled={loading}
-                                    className = "text-xs bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {loading ? 'Refreshing...' : 'Refresh'}
-                                </button>
+                                    <button
+                                        onClick={fetchSchema}
+                                        disabled={loading}
+                                        className = "text-xs bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {loading ? 'Refreshing...' : 'Refresh'}
+                                    </button>
+                                </div>
+
+                                {/* Search box */}
+                                <div className = "relative">
+                                    <svg className = "absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                    <input
+                                        type = "text"
+                                        placeholder = "Search tables..."
+                                        value = {searchTerm}
+                                        onChange = {(e) => setSearchTerm(e.target.value)}
+                                        className = "w-full pl-9 pr-3 py-2 text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500"
+                                    />
+                                    {searchTerm && (
+                                        <button
+                                            onClick = {() => setSearchTerm('')}
+                                            className = "absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                        >
+                                            <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Table count */}
+                                {schema && schema.tables && (
+                                    <div className = "text-xs text-gray-500 dark:text-gray-400 text-right">
+                                        {searchTerm ? (
+                                            <>
+                                                {getFilteredTables().length} of {schema.tables.length} table{schema.tables.length !== 1 ? 's' : ''}
+                                            </>
+                                        ) : (
+                                            <>
+                                                {schema.tables.length} table{schema.tables.length !== 1 ? 's' : ''}
+                                            </>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -234,9 +337,9 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
                 )}
 
                 {activeTab === 'er' && (
-                    <div className = "h-full flex items-center justify-center">
+                    <div className = "h-full flex flex-col">
                         {!isDbConnected ? (
-                            <div className = "flex flex-col items-center justify-center py-8 px-4 text-center">
+                            <div className = "flex flex-col items-center justify-center h-full py-8 px-4 text-center">
                                 <svg className = "w-12 h-12 text-gray-400 dark:text-gray-500 mb-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
                                     <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
                                 </svg>
@@ -247,10 +350,64 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
                                     Click the settings icon in the top right to connect to a database
                                 </p>
                             </div>
-                        ) : (
-                            <div className = "text-sm text-gray-500 dark:text-gray-400">
-                                ER diagram view coming soon
+                        ) : loading ? (
+                            <div className = "flex items-center justify-center h-full">
+                                <div className = "text-sm text-gray-500 dark:text-gray-400">Loading ER diagram...</div>
                             </div>
+                        ) : error ? (
+                            <div className = "flex items-center justify-center h-full">
+                                <div className = "text-sm text-red-600 dark:text-red-400 p-3 bg-red-50 dark:bg-red-900/20 rounded">
+                                    {error}
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                {/* diagram filters */}
+                                <div className = "space-y-2 mb-3">
+                                    {/* Search box */}
+                                    <div className = "relative">
+                                        <svg className = "absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                            <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                        <input
+                                            type = "text"
+                                            placeholder = "Filter diagram..."
+                                            value = {searchTerm}
+                                            onChange = {(e) => setSearchTerm(e.target.value)}
+                                            className = "w-full pl-9 pr-3 py-2 text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500"
+                                        />
+                                        {searchTerm && (
+                                            <button
+                                                onClick = {() => setSearchTerm('')}
+                                                className = "absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                            >
+                                                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* table count */}
+                                    {schema && schema.tables && (
+                                        <div className = "text-xs text-gray-500 dark:text-gray-400 text-right">
+                                            {searchTerm ? (
+                                                <>
+                                                    {getFilteredTables().length} of {schema.tables.length} table{schema.tables.length !== 1 ? 's' : ''}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    {schema.tables.length} table{schema.tables.length !== 1 ? 's' : ''}
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className = "flex-1 min-h-0">
+                                    <ERDiagram schema = {getFilteredSchema()} onAskAboutTable = {onAskAboutTable} />
+                                </div>
+                            </>
                         )}
                     </div>
                 )}

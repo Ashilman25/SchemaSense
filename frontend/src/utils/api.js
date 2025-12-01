@@ -62,6 +62,18 @@ export const schemaAPI = {
       method: 'GET',
     });
   },
+
+  //returns: {table:, columns, rows:, row_count}
+  getSampleRows: async(table, limit = 10) => {
+    const params = new URLSearchParams({
+      table, 
+      limit: String(limit),
+    });
+
+    return apiRequest(`/api/schema/sample-rows?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
 };
 
 
