@@ -99,7 +99,7 @@ const ERDiagram = ({schema, onAskAboutTable}) => {
                     type: MarkerType.ArrowClosed,
                     color: '#3b82f6',
                 },
-                label: `${rel.from_column} -> ${rel.to_column}`,
+                label: `${rel.from_column} → ${rel.to_column}`,
                 labelStyle: {fill: '#6b7280', fontSize: 10},
                 labelBgStyle: {fill: '#ffffff', fillOpacity: 0.8},
             };
