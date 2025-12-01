@@ -18,7 +18,7 @@ const ERDiagram = ({schema}) => {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [nodePositions, setNodePositions] = useState({});
-    const [expandNodes, setExpandedNodes] = useState({});
+    const [expandedNodes, setExpandedNodes] = useState({});
 
     const handleToggleExpand = useCallback((nodeId) => {
         setExpandedNodes(prev => ({
@@ -27,7 +27,7 @@ const ERDiagram = ({schema}) => {
         }));
     }, []);
 
-    //schema into react flow nodes
+    //schema into nodes
     const createNodesFromSchema = useCallback((schemaData, positions = {}, expanded = {}) => {
         if (!schemaData || !schemaData.tables) return [];
 
@@ -66,6 +66,77 @@ const ERDiagram = ({schema}) => {
 
         return tableNodes;
     }, [handleToggleExpand]);
+
+
+    //schema FK relations into edges
+    const createEdgesFromSchema = useCallback((schemaData) => {
+        if (!schemaData || !schemaData.relationships) return [];
+
+        const relationshipEdges = schemaData.relationships.map((rel, index) => {
+            const sourceKey = rel.from_table;
+            const targetKey = rel.to_table;
+
+            return {
+                id: `edge-${index}`,
+                source: sourceKey,
+                target: targetKey,
+                type: 'smoothstep',
+                animated: false,
+                style: {stroke: '#3b82f6', strokeWidth: 2},
+                markerEnd: {
+                    type: MarkerType.ArrowClosed,
+                    color: '#3b82f6',
+                },
+                label: `${rel.from_column} -> ${rel.to_column}`,
+                labelStyle: {fill: '#6b7280', fontSize: 10},
+                labelBgStyle: {fill: '#ffffff', fillOpacity: 0.8},
+            };
+        });
+
+        return relationshipEdges;
+    }, []);
+
+    //if schema changes, initial nodes and edges
+    useEffect(() => {
+        if (schema) {
+            const newNodes = createNodesFromSchema(schema, nodePositions, expandedNodes);
+            const newEdges = createEdgesFromSchema(schema);
+
+            setNodes(newNodes);
+            setEdges(newEdges);
+        }
+    }, [schema, createNodesFromSchema, createEdgesFromSchema, setNodes, setEdges, nodePositions, expandedNodes]);
+
+    //drag dropped
+    const onNodeDragStop = useCallback((_event, node) => {
+        setNodePositions(prev => ({
+            ...prev,
+            [node.id]: node.position,
+        }));
+    }, []);
+
+    //minimap color
+    const nodeColor = () => {
+        return '#3b82f6';
+    }
+
+    //UI if no schema data
+    if (!schema || !schema.tables || schema.tables.length === 0) {
+        return (
+            <div className = "h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+                <div className = "text-center">
+                    <svg className = "w-16 h-16 mx-auto mb-4 text-gray-400 dark:text-gray-500" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+
+                    <p className = "text-sm">No schema data available</p>
+                    <p className = "text-xs mt-2">Connect to a database to view the ER diagram</p>
+                </div>
+            </div>
+        );
+    }
+
+
 
 
 
