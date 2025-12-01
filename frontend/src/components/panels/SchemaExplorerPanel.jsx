@@ -259,7 +259,7 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
                                 </div>
                             </div>
                         ) : (
-                            <ERDiagram schema = {schema} />
+                            <ERDiagram schema = {schema} onAskAboutTable = {onAskAboutTable} />
                         )}
                     </div>
                 )}
