@@ -1,6 +1,6 @@
 from typing import Optional
 from app.models.schema_model import CanonicalSchemaModel
-from app.schema.introspect import introspect_tables_and_columns, introspect_primary_keys, introspect_foreign_keys
+from app.schema.introspect import introspect_tables_and_columns, introspect_primary_keys, introspect_foreign_keys, introspect_row_counts
 
 
 _schema_cache: Optional[CanonicalSchemaModel] = None
@@ -27,8 +27,9 @@ def refresh_schema(conn) -> CanonicalSchemaModel:
     tables_raw = introspect_tables_and_columns(conn)
     pks_raw = introspect_primary_keys(conn)
     fks_raw = introspect_foreign_keys(conn)
+    row_counts_raw = introspect_row_counts(conn)
 
-    schema_model = CanonicalSchemaModel.from_introspection(tables_raw, pks_raw, fks_raw)
+    schema_model = CanonicalSchemaModel.from_introspection(tables_raw, pks_raw, fks_raw, row_counts_raw)
 
     set_cached_schema(schema_model)
     return schema_model

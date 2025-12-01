@@ -171,3 +171,36 @@ def introspect_foreign_keys(conn):
             curr.close()
         except Exception:
             pass
+
+
+def introspect_row_counts(conn):
+    row_counts = {}
+
+    try:
+        curr = conn.cursor()
+
+        curr.execute("""
+                     SELECT n.nspname AS table_schema, c.relname AS table_name, c.reltuples::bigint AS row_count
+                     FROM pg_catalog.pg_class c
+                     JOIN pg_catalog.pg_namespace n
+                     ON c.relnamespace = n.oid
+                     WHERE c.relkind = 'r'
+                       AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+                     ORDER BY n.nspname, c.relname
+                     """)
+        count_info = curr.fetchall()
+
+        for table_schema, table_name, row_count in count_info:
+            key = (table_schema, table_name)
+            row_counts[key] = row_count if row_count >= 0 else 0
+
+        return row_counts
+
+    except Exception as e:
+        raise Exception(f"Error introspecting row counts: {str(e)}") from e
+
+    finally:
+        try:
+            curr.close()
+        except Exception:
+            pass
