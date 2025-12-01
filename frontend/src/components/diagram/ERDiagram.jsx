@@ -136,15 +136,47 @@ const ERDiagram = ({schema}) => {
         );
     }
 
+    return (
+        <div className = "h-full w-full">
+            <ReactFlow 
+                nodes = {nodes}
+                edges = {edges}
+                onNodesChange = {onNodesChange}
+                onEdgesChange = {onEdgesChange}
+                onNodeDragStop = {onNodeDragStop}
+                nodeTypes = {nodeTypes}
+                fitView
+                fitViewOptions = {{
+                    padding: 0.2,
+                    includeHiddenNodes: false,
+                }}
+                minZoom = {0.1}
+                maxZoom = {2}
+                defaultEdgeOptions = {{
+                    type: 'smoothstep',
+                }}
+            >
+                <Background 
+                    variant = "dots"
+                    gap = {16}
+                    size = {1}
+                    color = "#94a3b8"
+                    className = "dark:opacity-30"
+                />
 
+                <Controls showInteractive = {false} className = "bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg" />
 
+                <MiniMap 
+                    nodeColor = {nodeColor}
+                    nodeStrokeWidth = {3}
+                    zoomable
+                    pannable
+                    className = "bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg"
+                />
 
-
-
-
-
-
-
+            </ReactFlow>
+        </div>
+    );
 };
 
 export default ERDiagram;
