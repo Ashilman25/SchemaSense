@@ -45,7 +45,7 @@ const TableDetailPanel = ({table, schema, onClose, onAskAboutTable}) => {
             {/* panel header */}
             <div className = "sticky top-0 bg-blue-600 dark:bg-blue-700 text-white px-4 py-3 flex items-center justify-between">
                 <div className = "flex-1 min-w-0">
-                    <h3 className = "font-semibold text-sm" title = {`${table.schema}.${table.name}`}>
+                    <h3 className = "font-semibold text-sm truncate" title = {`${table.schema}.${table.name}`}>
                         {table.name}
                     </h3>
 
@@ -198,26 +198,80 @@ const TableDetailPanel = ({table, schema, onClose, onAskAboutTable}) => {
 
 
 
+                {/* sample rows preview */}
+                <div>
+                    <h4 className = "text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        Sample Data
+                    </h4>
 
+                    {!sampleRows ? (
+                        <button
+                            type = "button"
+                            onClick = {handlePreviewSampleRows}
+                            disabled = {loadingSampleRows}
+                            className = "w-full bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {loadingSampleRows ? 'Loading...' : 'Preview Sample Rows'}
+                        </button>
+                    ) : (
+                        <div className = "space-y-2">
+                            <div className = "flex items-center justify-between">
+                                <span className = "text-xs text-gray-600 dark:text-gray-400">
+                                    Showing {sampleRows.row_count} row{sampleRows.row_count !== 1 ? 's' : ''}
+                                </span>
 
+                                <button
+                                    type = "button"
+                                    onClick = {() => setSampleRows(null)}
+                                    className = "text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                                >
+                                    Hide
+                                </button>
+                            </div>
 
+                            <div className = "overflow-x-auto border border-gray-200 dark:border-slate-600 rounded">
+                                <table className = "min-w-full text-xs">
+                                    <thead className = "bg-gray-50 dark:bg-slate-700">
+                                        <tr>
+                                            {sampleRows.columns.map((col, idx) => (
+                                                <th key = {idx} className = "px-2 py-1 text-left font-mono font-medium text-gray-700 dark:text-gray-300">
+                                                    {col}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
 
+                                    <tbody className = "bg-white dark:bg-slate-800">
+                                        {sampleRows.rows.map((row, rowIdx) => (
+                                            <tr key = {rowIdx} className = "border-t border-gray-200 dark:border-slate-600">
+                                                {row.map((cell, cellIdx) => (
+                                                    <td 
+                                                        key = {cellIdx} 
+                                                        className = "px-2 py-1 font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap"
+                                                        title = {String(cell)}
+                                                    >
+                                                        {cell === null ? (
+                                                            <span className = "italic text-gray-400 dark:text-gray-500">null</span>
+                                                        ) : (
+                                                            String(cell).length > 20 ? String(cell).substring(0, 20) + '...' : String(cell)
+                                                        )}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
 
+                    {sampleRowsError && (
+                        <div className = "text-xs text-red-600 dark:text-red-400 p-2 bg-red-50 dark:bg-red-900/20 rounded">
+                            {sampleRowsError}
+                        </div>
+                    )}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+                </div>
             </div>
         </div>
     );
