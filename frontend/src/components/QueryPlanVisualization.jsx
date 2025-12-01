@@ -158,6 +158,62 @@ const QueryPlanVisualization = ({planData}) => {
   }, [planData, theme]);
 
 
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  useEffect(() => {
+    setNodes(initialNodes);
+    setEdges(initialEdges);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
+
+  const onInit = useCallback((reactFlowInstance) => {
+    reactFlowInstance.fitView({padding: 0.2});
+  }, []);
+
+  const defaultEdgeOptions = useMemo(() => ({
+    type: 'smoothstep',
+    animated: true,
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      width: 20,
+      height: 20,
+    },
+  }), []);
+
+  if (!planData || !planData.nodes || planData.nodes.length === 0) {
+    return (
+
+      <div className = "flex items-center justify-center h-full">
+        <div className = "text-center">
+
+          <svg
+            className = "mx-auto h-12 w-12 text-gray-400 dark:text-gray-600"
+            fill = "none"
+            stroke = "currentColor"
+            viewBox = "0 0 24 24"
+          >
+            <path 
+              strokeLinecap = "round"
+              strokeLinejoin = "round"
+              strokeWidth = {2}
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+            />
+          </svg>
+
+          <p className = "mt-2 text-sm text-gray-500 dark:text-gray-400">
+            No query plan available
+          </p>
+
+          <p className = "mt-1 text-xs text-gray-400 dark:text-gray-500">
+            Click "Show Plan" to generate a qery execution plan
+          </p>
+
+        </div>
+      </div>
+    );
+  }
+
+
 
 
 
