@@ -68,11 +68,34 @@ const TableNode = memo(({data}) => {
                     </div>
                 )}
 
+                {/* expanded section */}
+                {nonKeyColumns.length > 0 && (
+                    <button 
+                        onClick = {(e) => {
+                            e.stopPropagation();
+                            onToggleExpand(nodeId);
+                        }}
+                        className = "w-full text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-center mt-2 pt-2 border-t border-gray-200 dark:border-slate-600 transition-colors flex items-center justify-center space-x-1"
+                    >
+                        {isExpanded ? (
+                            <>
+                                <svg className = "w-3 h-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d="M5 15l7-7 7 7" />
+                                </svg>
+                                <span>Show less</span>
+                            </>
+                        ) : (
+                            <>
+                                <svg className = "w-3 h-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M19 9l-7 7-7-7" />
+                                </svg>
+                                <span>+{nonKeyColumns.length} more column{nonKeyColumns.length !== 1 ? 's' : ''}</span>
+                            </>
+                        )}
 
-
+                    </button>
+                )}
             </div>
-
-
         </div>
     );
 });
