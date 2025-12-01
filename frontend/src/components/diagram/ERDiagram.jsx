@@ -9,22 +9,32 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import TableNode from './TableNode';
+import TableDetailPanel from './TableDetailPanel';
 
 const nodeTypes = {
     tableNode: TableNode,
 };
 
-const ERDiagram = ({schema}) => {
+const ERDiagram = ({schema, onAskAboutTable}) => {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [nodePositions, setNodePositions] = useState({});
     const [expandedNodes, setExpandedNodes] = useState({});
+    const [selectedNode, setSelectedNode] = useState(null);
 
     const handleToggleExpand = useCallback((nodeId) => {
         setExpandedNodes(prev => ({
             ...prev,
             [nodeId]: !prev[nodeId],
         }));
+    }, []);
+
+    const handleNodeClick = useCallback((nodeId) => {
+        setSelectedNode(nodeId);
+    }, []);
+
+    const handleCloseDetailPanel = useCallback(() => {
+        setSelectedNode(null);
     }, []);
 
     //schema into nodes
@@ -60,12 +70,14 @@ const ERDiagram = ({schema}) => {
                     isExpanded: expanded[tableKey] || false,
                     onToggleExpand: handleToggleExpand,
                     nodeId: tableKey,
+                    onNodeClick: handleNodeClick,
                 },
+                selected: false, 
             };
         });
 
         return tableNodes;
-    }, [handleToggleExpand]);
+    }, [handleToggleExpand, handleNodeClick]);
 
 
     //schema FK relations into edges
@@ -107,6 +119,43 @@ const ERDiagram = ({schema}) => {
         }
     }, [schema, createNodesFromSchema, createEdgesFromSchema, setNodes, setEdges, nodePositions, expandedNodes]);
 
+    //if selected node changes, update
+    useEffect(() => {
+        setNodes((nds) =>
+            nds.map((node) => ({
+                ...node,
+                selected: node.id === selectedNode,
+            }))
+        );
+
+        //edge highlighting
+        if (selectedNode) {
+            setEdges((eds) =>
+                eds.map((edge) => {
+                    const isConnected = edge.source === selectedNode || edge.target === selectedNode;
+                    return {
+                        ...edge,
+                        animated: isConnected,
+                        style: {
+                            ...edge.style,
+                            stroke: isConnected ? '#10b981' : '#3b82f6',
+                            strokeWidth: isConnected ? 3 : 2,
+                        },
+                    };
+                })
+            );
+        } else {
+            //reset to default style if none selected
+            setEdges((eds) =>
+                eds.map((edge) => ({
+                    ...edge,
+                    animated: false,
+                    style: { stroke: '#3b82f6', strokeWidth: 2 },
+                }))
+            );
+        }
+    }, [selectedNode, setNodes, setEdges]);
+
     //drag dropped
     const onNodeDragStop = useCallback((_event, node) => {
         setNodePositions(prev => ({
@@ -136,8 +185,11 @@ const ERDiagram = ({schema}) => {
         );
     }
 
+    // Get selected table details
+    const selectedTable = selectedNode && schema?.tables ? schema.tables.find(t => `${t.schema}.${t.name}` === selectedNode) : null;
+
     return (
-        <div className = "h-full w-full">
+        <div className = "h-full w-full relative">
             <ReactFlow 
                 nodes = {nodes}
                 edges = {edges}
@@ -176,6 +228,16 @@ const ERDiagram = ({schema}) => {
                 />
 
             </ReactFlow>
+
+            {/* Table detail panel */}
+            {selectedNode && selectedTable && (
+                <TableDetailPanel
+                    table = {selectedTable}
+                    schema = {schema}
+                    onClose = {handleCloseDetailPanel}
+                    onAskAboutTable = {onAskAboutTable}
+                />
+            )}
         </div>
     );
 };
