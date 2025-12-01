@@ -23,6 +23,17 @@ const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess }) => {
 
   const handleTestAndSave = async () => {
     setError('');
+    
+    if (!formData.dbname || !formData.user || !formData.password) {
+      setError('Please fill in all required fields');
+      return;
+    }
+    
+    if (!formData.port || isNaN(parseInt(formData.port))) {
+      setError('Port must be a valid number');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
