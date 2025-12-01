@@ -124,10 +124,77 @@ const TableDetailPanel = ({table, schema, onClose, onAskAboutTable}) => {
                                     </div>
                                 </div>
                             </div>
-
                         ))}
                     </div>
                 </div>
+
+
+                {/* relations */}
+                {(outgoingFKs.length > 0 || incomingFKs.length > 0) && (
+                    <div>
+                        <h4 className = "text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            Relationships
+                        </h4>
+
+                        {/* outgoing FKs, like the table that is being referenced from this table*/}
+                        {outgoingFKs.length > 0 && (
+                            <div className = "mb-3">
+                                <h5 className = "text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                    References (Outgoing)
+                                </h5>
+
+                                <div className = "space-y-1">
+                                    {outgoingFKs.map((rel, idx) => (
+                                        <div key = {idx} className = "text-xs p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+                                            <div className = "flex items-center space-x-1">
+                                                <span className = "font-mono text-blue-700 dark:text-blue-400">
+                                                    {rel.from_column}
+                                                </span>
+                                                
+                                                <svg className = "w-3 h-3 text-blue-600 dark:text-blue-400" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M14 5l7 7m0 0l-7 7m7-7H3" />
+                                                </svg>
+                                                
+                                                <span className = "font-mono text-blue-700 dark:text-blue-400">
+                                                    {rel.to_table}.{rel.to_column}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* incoming fks, like the tables that reference this table */}
+                        {incomingFKs.length > 0 && (
+                            <div>
+                                <h5 className = "text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                    Referenced By (Incoming)
+                                </h5>
+
+                                <div className = "space-y-1">
+                                    {incomingFKs.map((rel, idx) => (
+                                        <div key = {idx} className = "text-xs p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                                            <div className = "flex items-center space-x-1">
+                                                <span className = "font-mono text-green-700 dark:text-green-400">
+                                                    {rel.from_table}.{rel.from_column}
+                                                </span>
+                                                
+                                                <svg className = "w-3 h-3 text-green-600 dark:text-green-400" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M14 5l7 7m0 0l-7 7m7-7H3" />
+                                                </svg>
+
+                                                <span className = "font-mono text-green-700 dark:text-green-400">
+                                                    {rel.to_column}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
 
 
 
