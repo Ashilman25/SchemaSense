@@ -142,3 +142,74 @@ class CanonicalSchemaModel(BaseModel):
     def apply_change(self, *_args, **_kwargs) -> None:
         raise NotImplementedError("Schema mutation not implemented yet.")
 
+
+
+
+    #VALIDATING THE INPUT
+    #helper funcs
+    
+    def _validate_column_type(self, col_type: str) -> None:
+        normalized_type = col_type.lower().strip()
+        
+        #array types like integer[]
+        if normalized_type.endswith('[]'):
+            base_type = normalized_type[:-2].strip()
+            
+            if base_type not in VALID_POSTGRES_TYPES:
+                raise SchemaValidationError(f"Invalid PostgreSQL type: '{col_type}'. Base type '{base_type}' is not recognized.")
+        
+            return
+        
+        #with params like varchar(255)
+        if '(' in normalized_type:
+            base_type = normalized_type.split('(')[0].strip()
+            
+            if base_type not in VALID_POSTGRES_TYPES:
+                raise SchemaValidationError(f"Invalid PostgreSQL type: '{col_type}'. Base type '{base_type}' is not recognized.")
+            
+            return
+        
+        #if type in valid
+        if normalized_type not in VALID_POSTGRES_TYPES:
+            raise SchemaValidationError(f"Invalid PostgreSQL type: '{col_type}'. Must be a valid PostgreSQL data type.")
+        
+        
+    
+    def _get_table_by_name(self, table_name: str, schema_name: str = "public") -> Optional[Table]:
+        fully_qualified = f"{schema_name}.{table_name}"
+        return self.tables.get(fully_qualified)
+    
+    def _get_column_by_name(self, table: Table, column_name: str) -> Optional[Column]:
+        for col in table.columns:
+            if col.name == column_name:
+                return col
+            
+        return None
+    
+    def _is_column_referenced_by_fk(self, table_name: str, column_name: str) -> List[Relationship]:
+        referenced_by = []
+        
+        for rel in self.relationships:
+            if rel.to_table == table_name and rel.to_column == column_name:
+                referenced_by.append(rel)
+                
+        return referenced_by
+    
+    
+    def _get_outgoing_fks(self, table_name: str, column_name: Optional[str] = None) -> List[Relationship]:
+        outgoing = []
+        
+        for rel in self.relationships:
+            if rel.from_table == table_name:
+                if column_name is None or rel.from_column == column_name:
+                    outgoing.append(rel)
+                    
+        return outgoing
+    
+    
+        
+    
+    
+    
+    
+    
