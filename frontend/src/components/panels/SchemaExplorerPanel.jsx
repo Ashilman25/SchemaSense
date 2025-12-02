@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from "react";
+import {useState, useEffect} from "react";
 import { schemaAPI } from "../../utils/api";
 import ERDiagram from "../diagram/ERDiagram";
 
@@ -10,6 +10,7 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
     const [expandedTables, setExpandedTables] = useState(new Set());
 
     const [searchTerm, setSearchTerm] = useState('');
+    const [notification, setNotification] = useState(null);
 
     useEffect(() => {
         if (isDbConnected) {
@@ -37,6 +38,18 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleSchemaUpdate = (newSchema, newDDL) => {
+        setSchema(newSchema);
+        setNotification({
+            type: 'success',
+            message: 'Changes saved to virtual schema (not applied to DB)'
+        });
+
+        setTimeout(() => {
+            setNotification(null);
+        }, 5000);
     };
 
     const toggleTable = (tableKey) => {
@@ -247,7 +260,53 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
     };
 
     return (
-        <div className = "h-full bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col transition-colors">
+        <div className = "h-full bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col transition-colors relative">
+
+            {/* notification banner */}
+            {notification && (
+                <div className = {`absolute top-0 left-0 right-0 z-20 px-4 py-3 ${
+                    notification.type === 'success'
+                        ? 'bg-green-100 dark:bg-green-900/30 border-b border-green-200 dark:border-green-800'
+                        : 'bg-red-100 dark:bg-red-900/30 border-b border-red-200 dark:border-red-800'
+                }`}>
+                    <div className = "flex items-center justify-between">
+                        <div className = "flex items-center space-x-2">
+                            {notification.type === 'success' ? (
+                                <svg className = "w-5 h-5 text-green-600 dark:text-green-400" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+
+                            ) : (
+                                <svg className = "w-5 h-5 text-red-600 dark:text-red-400" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                
+                            )}
+
+                            <span className = {`text-sm font-medium ${
+                                notification.type === 'success'
+                                    ? 'text-green-800 dark:text-green-200'
+                                    : 'text-red-800 dark:text-red-200'
+                            }`}>
+                                {notification.message}
+                            </span>
+                        </div>
+
+                        <button
+                            onClick = {() => setNotification(null)}
+                            className = {`${
+                                notification.type === 'success'
+                                    ? 'text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300'
+                                    : 'text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300'
+                            }`}
+                        >
+                            <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* tabs */}
             <div className = "border-b border-gray-200 dark:border-slate-700">
@@ -405,7 +464,11 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
                                 </div>
 
                                 <div className = "flex-1 min-h-0">
-                                    <ERDiagram schema = {getFilteredSchema()} onAskAboutTable = {onAskAboutTable} />
+                                    <ERDiagram
+                                        schema = {getFilteredSchema()}
+                                        onAskAboutTable = {onAskAboutTable}
+                                        onSchemaUpdate = {handleSchemaUpdate}
+                                    />
                                 </div>
                             </>
                         )}

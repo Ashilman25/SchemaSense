@@ -3,7 +3,7 @@ import {Handle, Position} from 'reactflow';
 
 //custom node for db tables
 const TableNode = memo(({data, selected}) => {
-    const {tableName, schema, columns, isExpanded, onToggleExpand, nodeId, onNodeClick} = data;
+    const {tableName, schema, columns, isExpanded, onToggleExpand, nodeId, onNodeClick, onContextMenu} = data;
 
     const keyColumns = columns.filter(col => col.is_pk || col.is_fk);
     const nonKeyColumns = columns.filter(col => !col.is_pk && !col.is_fk);
@@ -24,7 +24,10 @@ const TableNode = memo(({data, selected}) => {
             <Handle type = "source" position = {Position.Bottom} className = "w-3 h-3 !bg-blue-500" />
 
             {/* table header */}
-            <div className = "bg-blue-600 dark:bg-blue-700 text-white px-3 py-2 rounded-t-lg">
+            <div
+                className = "bg-blue-600 dark:bg-blue-700 text-white px-3 py-2 rounded-t-lg cursor-pointer"
+                onContextMenu = {(e) => onContextMenu && onContextMenu(e, nodeId)}
+            >
                 <div className = "font-semibold text-sm truncate" title = {`${schema}.${tableName}`}>
                     {tableName}
                 </div>

@@ -66,12 +66,35 @@ export const schemaAPI = {
   //returns: {table:, columns, rows:, row_count}
   getSampleRows: async(table, limit = 10) => {
     const params = new URLSearchParams({
-      table, 
+      table,
       limit: String(limit),
     });
 
     return apiRequest(`/api/schema/sample-rows?${params.toString()}`, {
       method: 'GET',
+    });
+  },
+
+  //returns: {ddl:, table_count:, relationship_count:}
+  getDDL: async () => {
+    return apiRequest('/api/schema/ddl', {
+      method: 'GET',
+    });
+  },
+
+  //returns: {success:, schema:, ddl:, errors:}
+  applyEREdits: async (actions) => {
+    return apiRequest('/api/schema/er-edit', {
+      method: 'POST',
+      body: JSON.stringify({ actions }),
+    });
+  },
+
+  //returns: {success:, schema:, ddl:, error:, details:}
+  applyDDLEdit: async (ddl) => {
+    return apiRequest('/api/schema/ddl-edit', {
+      method: 'POST',
+      body: JSON.stringify({ ddl }),
     });
   },
 };

@@ -10,17 +10,25 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import TableNode from './TableNode';
 import TableDetailPanel from './TableDetailPanel';
+import AddTableModal from '../modals/AddTableModal';
+import RenameTableModal from '../modals/RenameTableModal';
+import TableContextMenu from './TableContextMenu';
+import {schemaAPI} from '../../utils/api';
 
 const nodeTypes = {
     tableNode: TableNode,
 };
 
-const ERDiagram = ({schema, onAskAboutTable}) => {
+const ERDiagram = ({schema, onAskAboutTable, onSchemaUpdate}) => {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [nodePositions, setNodePositions] = useState({});
     const [expandedNodes, setExpandedNodes] = useState({});
     const [selectedNode, setSelectedNode] = useState(null);
+    const [showAddTableModal, setShowAddTableModal] = useState(false);
+    const [showRenameTableModal, setShowRenameTableModal] = useState(false);
+    const [contextMenu, setContextMenu] = useState(null);
+    const [tableToRename, setTableToRename] = useState(null);
 
     const handleToggleExpand = useCallback((nodeId) => {
         setExpandedNodes(prev => ({
@@ -36,6 +44,105 @@ const ERDiagram = ({schema, onAskAboutTable}) => {
     const handleCloseDetailPanel = useCallback(() => {
         setSelectedNode(null);
     }, []);
+
+    const handleTableContextMenu = useCallback((event, nodeId) => {
+        event.preventDefault();
+        setContextMenu({
+            x: event.clientX,
+            y: event.clientY,
+            nodeId
+        });
+
+    }, []);
+
+    const handleAddTable = async (tableData) => {
+        try {
+            const actions = [
+                {
+                    type: 'add_table',
+                    name: tableData.tableName,
+                    schema: tableData.schema
+                }
+            ];
+
+            for (const col of tableData.columns) {
+                actions.push({
+                    type: 'add_column',
+                    table: `${tableData.schema}.${tableData.tableName}`,
+                    column: col
+                });
+            }
+
+            const response = await schemaAPI.applyEREdits(actions);
+
+            if (response.success) {
+                onSchemaUpdate(response.schema, response.ddl);
+
+            } else {
+                throw new Error(response.errors?.join(', ') || 'Failed to add table');
+            }
+
+        } catch (error) {
+            console.error('Failed to add table:', error);
+            throw error;
+        }
+    };
+
+    const handleRenameTable = async (newName) => {
+        if (!tableToRename) return;
+
+        try {
+            const [schema, oldName] = tableToRename.split('.');
+
+            const actions = [{
+                type: 'rename_table',
+                old_name: oldName,
+                new_name: newName,
+                schema: schema
+            }];
+
+            const response = await schemaAPI.applyEREdits(actions);
+
+            if (response.success) {
+                onSchemaUpdate(response.schema, response.ddl);
+                setSelectedNode(null);
+
+            } else {
+                throw new Error(response.errors?.join(', ') || 'Failed to rename table');
+            }
+
+        } catch (error) {
+            console.error('Failed to rename table:', error);
+            throw error;
+        }
+    };
+
+    const handleDeleteTable = async (tableKey) => {
+        try {
+            const [schema, name] = tableKey.split('.');
+
+            const actions = [{
+                type: 'drop_table',
+                name: name,
+                schema: schema,
+                force: false
+            }];
+
+            const response = await schemaAPI.applyEREdits(actions);
+
+            if (response.success) {
+                onSchemaUpdate(response.schema, response.ddl);
+                setSelectedNode(null);
+
+            } else {
+                throw new Error(response.errors?.join(', ') || 'Failed to delete table');
+            }
+
+        } catch (error) {
+            console.error('Failed to delete table:', error);
+            alert(`Failed to delete table: ${error.message}`);
+        }
+    };
 
     //schema into nodes
     const createNodesFromSchema = useCallback((schemaData, positions = {}, expanded = {}) => {
@@ -71,13 +178,14 @@ const ERDiagram = ({schema, onAskAboutTable}) => {
                     onToggleExpand: handleToggleExpand,
                     nodeId: tableKey,
                     onNodeClick: handleNodeClick,
+                    onContextMenu: handleTableContextMenu,
                 },
-                selected: false, 
+                selected: false,
             };
         });
 
         return tableNodes;
-    }, [handleToggleExpand, handleNodeClick]);
+    }, [handleToggleExpand, handleNodeClick, handleTableContextMenu]);
 
 
     //schema FK relations into edges
@@ -190,6 +298,19 @@ const ERDiagram = ({schema, onAskAboutTable}) => {
 
     return (
         <div className = "h-full w-full relative">
+
+            {/* add table */}
+            <button
+                onClick = {() => setShowAddTableModal(true)}
+                className = "absolute top-4 right-4 z-10 bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg transition-colors flex items-center space-x-2"
+            >
+                <svg className = "w-5 h-5" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M12 4v16m8-8H4" />
+                </svg>
+
+                <span>Add Table</span>
+            </button>
+
             <ReactFlow 
                 nodes = {nodes}
                 edges = {edges}
@@ -236,6 +357,38 @@ const ERDiagram = ({schema, onAskAboutTable}) => {
                     schema = {schema}
                     onClose = {handleCloseDetailPanel}
                     onAskAboutTable = {onAskAboutTable}
+                    onSchemaUpdate = {onSchemaUpdate}
+                />
+            )}
+
+
+            <AddTableModal
+                isOpen = {showAddTableModal}
+                onClose = {() => setShowAddTableModal(false)}
+                onSubmit = {handleAddTable}
+            />
+
+            <RenameTableModal
+                isOpen = {showRenameTableModal}
+                onClose = {() => {
+                    setShowRenameTableModal(false);
+                    setTableToRename(null);
+                }}
+                onSubmit = {handleRenameTable}
+                currentName = {tableToRename ? tableToRename.split('.')[1] : ''}
+            />
+
+
+            {contextMenu && (
+                <TableContextMenu
+                    position = {{x: contextMenu.x, y: contextMenu.y}}
+                    onClose = {() => setContextMenu(null)}
+                    onRename = {() => {
+                        setTableToRename(contextMenu.nodeId);
+                        setShowRenameTableModal(true);
+                    }}
+                    onDelete = {() => handleDeleteTable(contextMenu.nodeId)}
+                    tableName = {contextMenu.nodeId ? contextMenu.nodeId.split('.')[1] : ''}
                 />
             )}
         </div>
