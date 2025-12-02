@@ -136,7 +136,83 @@ class CanonicalSchemaModel(BaseModel):
         }
 
         return api_data
+    
+    
+    def to_ddl(self) -> str:
+        ddl_statements = []
         
+        sorted_tables = sorted(self.tables.items(), key = lambda x: x[0])
+        
+        for _, table in sorted_tables:
+            ddl_statements.append(self._generate_create_table_statement(table))
+            
+        fk_statements = self._generate_foreign_key_statements()
+        if fk_statements:
+            ddl_statements.extend(fk_statements)
+            
+        
+        return "\n\n".join(ddl_statements)
+    
+    
+    def _generate_create_table_statement(self, table: Table) -> str:
+        lines = []
+        
+        fully_qualified = f"{table.schema}.{table.name}"
+        lines.append(f"CREATE TABLE {fully_qualified} (")
+        
+        column_lines = []
+        pk_columns = []
+        
+        for col in table.columns:
+            col_parts = [f"    {col.name}", col.type]
+            
+            if not col.nullable:
+                col_parts.append("NOT NULL")
+                
+            column_lines.append(" ".join(col_parts))
+            
+            if col.is_pk:
+                pk_columns.append(col.name)
+                
+        if pk_columns:
+            pk_constraint_name = f"{table.name}_pkey"
+            pk_columns_str = ", ".join(pk_columns)
+            column_lines.append(f"    CONSTRAINT {pk_constraint_name} PRIMARY KEY ({pk_columns_str})")
+            
+        lines.append(",\n".join(column_lines))
+        lines.append(");")
+        return "\n".join(lines)
+    
+    def _generate_foreign_key_statements(self) -> List[str]:
+        fk_statements = []
+        relationships_by_table = {}
+        
+        for rel in self.relationships:
+            if rel.from_table not in relationships_by_table:
+                relationships_by_table[rel.from_table] = []
+                
+            relationships_by_table[rel.from_table].append(rel)
+
+
+        for from_table in sorted(relationships_by_table.keys()):
+            for rel in relationships_by_table[from_table]:
+                fk_statements.append(self._generate_single_fk_statement(rel))
+
+        return fk_statements
+    
+    def _generate_single_fk_statement(self, rel: Relationship) -> str:
+        from_table_name = rel.from_table.split(".")[-1]
+        constraint_name = f"{from_table_name}_{rel.from_column}_fkey"
+
+        statement = (
+            f"ALTER TABLE {rel.from_table}\n"
+            f"    ADD CONSTRAINT {constraint_name}\n"
+            f"    FOREIGN KEY ({rel.from_column})\n"
+            f"    REFERENCES {rel.to_table} ({rel.to_column});"
+        )
+
+        return statement
+
 
     #change the model according to schema edits
     def apply_change(self, *_args, **_kwargs) -> None:
