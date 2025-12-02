@@ -329,3 +329,35 @@ def _apply_single_action(schema_model: CanonicalSchemaModel, action: ERAction) -
         raise ValueError(f"Unknown action type: {action_type}")
 
 
+@router.post('/ddl-edit')
+def apply_ddl_edit(request: DDLEditRequest) -> DDLEditResponse:
+    try:
+
+        new_schema_model = CanonicalSchemaModel.from_ddl(request.ddl)
+        set_cached_schema(new_schema_model)
+
+        return DDLEditResponse(
+            success = True,
+            schema = new_schema_model.to_dict_for_api(),
+            ddl = new_schema_model.to_ddl(),
+            error = None,
+            details = None
+        )
+
+    except SchemaValidationError as e:
+        return DDLEditResponse(
+            success = False,
+            schema = None,
+            ddl = None,
+            error = "Schema validation error",
+            details = str(e)
+        )
+
+    except Exception as e:
+        return DDLEditResponse(
+            success = False,
+            schema = None,
+            ddl = None,
+            error = "DDL parsing failed",
+            details = str(e)
+        )
