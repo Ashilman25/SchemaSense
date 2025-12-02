@@ -371,5 +371,87 @@ class CanonicalSchemaModel(BaseModel):
             )
         ]
         
+        
+        
+        
+    #RELATIONSHIP MUTATIONS
     
+    def add_relationship(self, from_table: str, from_column: str, to_table: str, to_column: str, from_schema: str = "public", to_schema: str = "public") -> None:
+        from_fqn = f"{from_schema}.{from_table}"
+        to_fqn = f"{to_schema}.{to_table}"
+        
+        #check start table exists
+        if from_fqn not in self.tables:
+            raise SchemaValidationError(f"Source table '{from_fqn}' does not exist.")
+        
+        #check end tables exist
+        if to_fqn not in self.tables:
+            raise SchemaValidationError(f"Target table '{to_fqn}' does not exist.")
+        
+        from_table_obj = self.tables[from_fqn]
+        to_table_obj = self.tables[to_fqn]
+        
+        from_col = self._get_column_by_name(from_table_obj, from_column)
+        if not from_col:
+            raise SchemaValidationError(f"Source column '{from_column}' does not exist in table '{from_fqn}'.")
+        
+        to_col = self._get_column_by_name(to_table_obj, to_column)
+        if not to_col:
+            raise SchemaValidationError(f"Target column '{to_column}' does not exist in table '{to_fqn}'.")
+        
+        
+        if not to_col.is_pk:
+            raise SchemaValidationError(
+                f"Target column '{to_fqn}.{to_column}' must be a primary key or unique column. "
+                f"Foreign keys must reference a PK or unique constraint."
+            )
+            
+        
+        for rel in self.relationships:
+            if (rel.from_table == from_fqn and rel.from_column == from_column and rel.to_table == to_fqn and rel.to_column == to_column):
+                raise SchemaValidationError(f"Relationship from '{from_fqn}.{from_column}' to '{to_fqn}.{to_column}' already exists.")
+            
+        
+        #mark source col as FK and add relationship
+        from_col.is_fk = True
+        
+        new_relationship = Relationship(from_table = from_fqn, from_column = from_column, to_table = to_fqn, to_column = to_column)
+        self.relationships.append(new_relationship)
+        
+        
+    def remove_relationship(self, from_table: str, from_column: str, to_table: str, to_column: str, from_schema: str = "public", to_schema: str = "public") -> None:
+        from_fqn = f"{from_schema}.{from_table}"
+        to_fqn = f"{to_schema}.{to_table}"
+        
+        
+        #find relationship
+        relationship_found = False
+        for i, rel in enumerate(self.relationships):
+            if (rel.from_table == from_fqn and rel.from_column == from_column and rel.to_table == to_fqn and rel.to_column == to_column):
+                relationship_found = True
+                del self.relationships[i]
+                break
+            
+        if not relationship_found:
+            raise SchemaValidationError(f"Relationship from '{from_fqn}.{from_column}' to '{to_fqn}.{to_column}' does not exist.")
+        
+        
+        #check if source col as outgoing FKs, if not unmark from fk
+        if from_fqn in self.tables:
+            from_table_obj = self.tables[from_fqn]
+            from_col = self._get_column_by_name(from_table_obj, from_column)
+
+            if from_col:
+                still_fk = False
+                
+                for rel in self.relationships:
+                    if rel.from_table == from_fqn and rel.from_column == from_column:
+                        still_fk = True
+                        break
+
+                if not still_fk:
+                    from_col.is_fk = False
+        
+
+
     
