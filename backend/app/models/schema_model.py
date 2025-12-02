@@ -217,8 +217,78 @@ class CanonicalSchemaModel(BaseModel):
         table = Table(name = table_name, schema = schema_name, columns = columns, row_count = None)
 
         tables_dict[fully_qualified_name] = table
+        
+        
+    
+    @classmethod
+    def _process_alter_table(cls, statement: exp.Alter, tables_dict: Dict[str, Table], relationships_list: List[Relationship]) -> None:
+        table_expr = statement.this
 
+        if isinstance(table_expr, exp.Table):
+            from_table_name = table_expr.name
+            from_schema = table_expr.db or "public"
+            
+        else:
+            from_table_name = str(table_expr)
+            from_schema = "public"
 
+        from_fqn = f"{from_schema}.{from_table_name}"
+        actions = statement.actions if hasattr(statement, 'actions') else statement.expressions
+
+        for action in actions:
+            if isinstance(action, exp.AddConstraint):
+                for constraint_expr in action.expressions:
+                    
+                    if isinstance(constraint_expr, exp.Constraint):
+                        actual_constraint = constraint_expr.expressions[0] if constraint_expr.expressions else None
+                        
+                        if actual_constraint and isinstance(actual_constraint, exp.ForeignKey):
+                            cls._process_foreign_key(actual_constraint, from_fqn, tables_dict, relationships_list)
+                            
+                    elif isinstance(constraint_expr, exp.ForeignKey):
+                        cls._process_foreign_key(constraint_expr, from_fqn, tables_dict, relationships_list)
+
+    @classmethod
+    def _process_foreign_key(cls, constraint: exp.ForeignKey, from_fqn: str, tables_dict: Dict[str, Table], relationships_list: List[Relationship]) -> None:
+        from_columns = [col.name for col in constraint.expressions]
+
+        reference = constraint.args.get('reference')
+        if isinstance(reference, exp.Reference):
+            to_table_expr = reference.this
+
+            to_columns = []
+            if isinstance(to_table_expr, exp.Schema):
+                to_columns = [col.name if hasattr(col, 'name') else str(col) for col in to_table_expr.expressions]
+                to_table_expr = to_table_expr.this
+
+            if isinstance(to_table_expr, exp.Table):
+                to_table_name = to_table_expr.name
+                to_schema = to_table_expr.db or "public"
+                
+            else:
+                to_table_name = str(to_table_expr)
+                to_schema = "public"
+
+            to_fqn = f"{to_schema}.{to_table_name}"
+
+            for i, from_col in enumerate(from_columns):
+                to_col = to_columns[i] if i < len(to_columns) else from_col
+
+                if from_fqn in tables_dict:
+                    from_table = tables_dict[from_fqn]
+                    
+                    for col in from_table.columns:
+                        if col.name == from_col:
+                            col.is_fk = True
+                            break
+
+                # Add relationship
+                relationships_list.append(Relationship(
+                    from_table = from_fqn,
+                    from_column = from_col,
+                    to_table = to_fqn,
+                    to_column = to_col
+                ))
 
     #turn model -> json dict or other for api
     def to_dict_for_api(self) -> dict:
