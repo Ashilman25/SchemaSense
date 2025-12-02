@@ -279,7 +279,50 @@ class CanonicalSchemaModel(BaseModel):
             if rel.from_table != fully_qualified_name and rel.to_table != fully_qualified_name
         ]
         
+        
+        
     
+    #COLUMN MUTATIONS
+    
+    def add_column(self, table_name: str, column: Column, schema: str = "public") -> None:
+        fully_qualified_name = f"{schema}.{table_name}"
+        
+        if fully_qualified_name not in self.tables:
+            raise SchemaValidationError(f"Table '{fully_qualified_name}' does not exist.")
+        
+        table = self.tables[fully_qualified_name]
+        
+        if self._get_column_by_name(table, column.name):
+            raise SchemaValidationError(f"Column '{column.name}' already exists in table '{fully_qualified_name}'.")
+        
+        self._validate_column_type(column.type)
+        table.columns.append(column)
+        
+        
+        
+    def rename_column(self, table_name: str, old_col: str, new_col: str, schema: str = "public") -> None:
+        fully_qualified_name = f"{schema}.{table_name}"
+        
+        if fully_qualified_name not in self.tables:
+            raise SchemaValidationError(f"Table '{fully_qualified_name}' does not exist.")
+        
+        table = self.tables[fully_qualified_name]
+        
+        old_column = self._get_column_by_name(table, old_col)
+        if not old_column:
+            raise SchemaValidationError(f"Column '{old_col}' does not exist in table '{fully_qualified_name}'.")
+        
+        if self._get_column_by_name(table, new_col):
+            raise SchemaValidationError(f"Column '{new_col}' already exists in table '{fully_qualified_name}'.")
+        
+        old_column.name = new_col
+        
+        for rel in self.relationships:
+            if rel.from_table == fully_qualified_name and rel.from_column == old_col:
+                rel.from_column = new_col
+                
+            if rel.to_table == fully_qualified_name and rel.to_column == old_col:
+                rel.to_column = new_col
         
     
     
