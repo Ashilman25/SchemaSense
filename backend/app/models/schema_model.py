@@ -289,6 +289,68 @@ class CanonicalSchemaModel(BaseModel):
                     to_table = to_fqn,
                     to_column = to_col
                 ))
+                
+                
+    
+    @classmethod
+    def _extract_column_type(cls, column_def: exp.ColumnDef) -> str:
+        if not column_def.kind:
+            return "text"  
+
+        type_expr = column_def.kind
+
+        if isinstance(type_expr, exp.DataType):
+            type_obj = type_expr.this
+            type_str = type_obj.value if hasattr(type_obj, 'value') else str(type_obj)
+
+            is_array = type_str.upper() == "ARRAY"
+
+            if is_array and type_expr.expressions:
+                nested_type = type_expr.expressions[0]
+                if isinstance(nested_type, exp.DataType):
+                    type_str = nested_type.this.value if hasattr(nested_type.this, 'value') else str(nested_type.this)
+
+                    if nested_type.expressions:
+                        params = [str(e) for e in nested_type.expressions]
+                        type_str += f"({','.join(params)})"
+    
+                else:
+                    type_str = str(nested_type)
+                    
+                type_str += "[]"
+            elif type_expr.expressions and not is_array:
+                params = [str(e) for e in type_expr.expressions]
+                type_str += f"({','.join(params)})"
+
+            return type_str.lower()
+
+        return str(type_expr).lower()
+
+    @classmethod
+    def _extract_nullable(cls, column_def: exp.ColumnDef) -> bool:
+        for constraint in column_def.constraints:
+            if isinstance(constraint, exp.NotNullColumnConstraint):
+                return False
+            
+            elif isinstance(constraint, exp.ColumnConstraint):
+                if isinstance(constraint.kind, exp.NotNullColumnConstraint):
+                    return False
+
+        return True
+
+    @classmethod
+    def _is_primary_key_inline(cls, column_def: exp.ColumnDef) -> bool:
+        for constraint in column_def.constraints:
+            if isinstance(constraint, exp.PrimaryKeyColumnConstraint):
+                return True
+            
+            elif isinstance(constraint, exp.ColumnConstraint):
+                if isinstance(constraint.kind, exp.PrimaryKeyColumnConstraint):
+                    return True
+                
+        return False
+
+
 
     #turn model -> json dict or other for api
     def to_dict_for_api(self) -> dict:
