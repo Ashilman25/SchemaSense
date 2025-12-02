@@ -161,3 +161,171 @@ def get_schema_ddl():
                 pass
 
 
+@router.post('/er-edit')
+def apply_er_edits(request: EREditRequest) -> EREditResponse:
+    conn = None
+    try:
+        conn = get_connection()
+        schema_model = get_or_refresh_schema(conn)
+
+        errors = []
+        for action in request.actions:
+            try:
+                _apply_single_action(schema_model, action)
+                
+            except SchemaValidationError as e:
+                errors.append(f"Action '{action.type}': {str(e)}")
+                
+            except Exception as e:
+                errors.append(f"Action '{action.type}' failed: {str(e)}")
+
+
+        if errors:
+            return EREditResponse(success = False, errors = errors)
+
+        set_cached_schema(schema_model)
+        return EREditResponse(
+            success = True,
+            schema = schema_model.to_dict_for_api(),
+            ddl = schema_model.to_ddl(),
+            errors = None
+        ) 
+
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=f"Database connection unavailable: {str(e)}")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to apply ER edits: {str(e)}")
+
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _apply_single_action(schema_model: CanonicalSchemaModel, action: ERAction) -> None:
+
+    action_type = action.type
+
+    if action_type == "add_table":
+        schema_model.add_table(
+            name=action.name,
+            schema=action.schema or "public",
+            columns=None
+        )
+
+    elif action_type == "rename_table":
+        schema_model.rename_table(
+            old_name=action.old_name,
+            new_name=action.new_name,
+            schema=action.schema or "public"
+        )
+
+    elif action_type == "drop_table":
+        schema_model.drop_table(
+            name=action.name,
+            schema=action.schema or "public",
+            force=action.force or False
+        )
+
+    elif action_type == "add_column":
+        table_parts = action.table.split(".")
+        if len(table_parts) == 2:
+            schema_name, table_name = table_parts
+            
+        else:
+            schema_name = action.schema or "public"
+            table_name = action.table
+
+
+        col_data = action.column
+        column = Column(
+            name = col_data.get("name"),
+            type = col_data.get("type"),
+            is_pk = col_data.get("is_pk", False),
+            is_fk = col_data.get("is_fk", False),
+            nullable = col_data.get("nullable", True)
+        )
+
+        schema_model.add_column(
+            table_name = table_name,
+            column = column,
+            schema = schema_name
+        )
+
+    elif action_type == "rename_column":
+        table_parts = action.table.split(".")
+        if len(table_parts) == 2:
+            schema_name, table_name = table_parts
+            
+        else:
+            schema_name = action.schema or "public"
+            table_name = action.table
+
+        schema_model.rename_column(
+            table_name = table_name,
+            old_col = action.old_col,
+            new_col = action.new_col,
+            schema = schema_name
+        )
+
+    elif action_type == "drop_column":
+        table_parts = action.table.split(".")
+        if len(table_parts) == 2:
+            schema_name, table_name = table_parts
+            
+        else:
+            schema_name = action.schema or "public"
+            table_name = action.table
+
+        schema_model.drop_column(
+            table_name = table_name,
+            column_name = action.column_name,
+            schema = schema_name,
+            force = action.force or False
+        )
+
+    elif action_type == "add_relationship":
+        from_parts = action.from_table.split(".")
+        to_parts = action.to_table.split(".")
+
+        from_schema = from_parts[0] if len(from_parts) == 2 else (action.from_schema or "public")
+        from_table = from_parts[-1]
+
+        to_schema = to_parts[0] if len(to_parts) == 2 else (action.to_schema or "public")
+        to_table = to_parts[-1]
+
+        schema_model.add_relationship(
+            from_table = from_table,
+            from_column = action.from_column,
+            to_table = to_table,
+            to_column = action.to_column,
+            from_schema = from_schema,
+            to_schema = to_schema
+        )
+
+    elif action_type == "remove_relationship":
+        from_parts = action.from_table.split(".")
+        to_parts = action.to_table.split(".")
+
+        from_schema = from_parts[0] if len(from_parts) == 2 else (action.from_schema or "public")
+        from_table = from_parts[-1]
+
+        to_schema = to_parts[0] if len(to_parts) == 2 else (action.to_schema or "public")
+        to_table = to_parts[-1]
+
+        schema_model.remove_relationship(
+            from_table = from_table,
+            from_column = action.from_column,
+            to_table = to_table,
+            to_column = action.to_column,
+            from_schema = from_schema,
+            to_schema = to_schema
+        )
+
+    else:
+        raise ValueError(f"Unknown action type: {action_type}")
+
+
