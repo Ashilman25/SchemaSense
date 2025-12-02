@@ -323,9 +323,53 @@ class CanonicalSchemaModel(BaseModel):
                 
             if rel.to_table == fully_qualified_name and rel.to_column == old_col:
                 rel.to_column = new_col
+                
+                
+                
+    def drop_column(self, table_name: str, column_name: str, schema: str = "public", force: bool = False) -> None:
+        fully_qualified_name = f"{schema}.{table_name}"
         
+        if fully_qualified_name not in self.tables:
+            raise SchemaValidationError(f"Table '{fully_qualified_name}' does not exist.")
+        
+        table = self.tables[fully_qualified_name]
+        
+        column = self._get_column_by_name(table, column_name)
+        if not column:
+            raise SchemaValidationError(f"Column '{column_name}' does not exist in table '{fully_qualified_name}'.")
+        
+        #check if col referenced by FKs
+        referenced_by = self._is_column_referenced_by_fk(fully_qualified_name, column_name)
+        if referenced_by and not force:
+            fk_details = [f"{r.from_table}.{r.from_column}" for r in referenced_by]
+            
+            raise SchemaValidationError(
+                f"Cannot drop column '{fully_qualified_name}.{column_name}'. "
+                f"It is referenced by foreign keys: {', '.join(fk_details)}. "
+                f"Use force=True to drop anyway."
+            )
     
-    
-    
+        #check if col is referencing other FKs
+        outgoing_fks = self._get_outgoing_fks(fully_qualified_name, column_name)
+        if outgoing_fks and not force:
+            fk_details = [f"{r.to_table}.{r.to_column}" for r in outgoing_fks]
+            
+            raise SchemaValidationError(
+                f"Cannot drop column '{fully_qualified_name}.{column_name}'. "
+                f"It has foreign key constraints to: {', '.join(fk_details)}. "
+                f"Use force=True to drop anyway."
+            )
+        
+        #remove col and relations    
+        table.columns = [col for col in table.columns if col.name != column_name]
+        
+        self.relationships = [
+            rel for rel in self.relationships
+            if not (
+                (rel.from_table == fully_qualified_name and rel.from_column == column_name) or
+                (rel.to_table == fully_qualified_name and rel.to_column == column_name)
+            )
+        ]
+        
     
     
