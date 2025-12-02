@@ -1,10 +1,17 @@
 import {useState, useEffect} from 'react';
 import {schemaAPI} from '../../utils/api';
+import EditColumnModal from '../modals/EditColumnModal';
+import AddRelationshipModal from '../modals/AddRelationshipModal';
 
-const TableDetailPanel = ({table, schema, onClose, onAskAboutTable}) => {
+const TableDetailPanel = ({table, schema, onClose, onAskAboutTable, onSchemaUpdate}) => {
     const [sampleRows, setSampleRows] = useState(null);
     const [loadingSampleRows, setLoadingSampleRows] = useState(false);
     const [sampleRowsError, setSampleRowsError] = useState(null);
+
+    const [showAddColumnModal, setShowAddColumnModal] = useState(false);
+    const [showEditColumnModal, setShowEditColumnModal] = useState(false);
+    const [editingColumn, setEditingColumn] = useState(null);
+    const [showAddRelationshipModal, setShowAddRelationshipModal] = useState(false);
 
     const tableKey = `${table.schema}.${table.name}`;
 
@@ -36,7 +43,138 @@ const TableDetailPanel = ({table, schema, onClose, onAskAboutTable}) => {
     const handleAskAboutTable = () => {
         onAskAboutTable(tableKey);
         //onClose();
-    }
+    };
+
+    const handleAddColumn = async (columnData) => {
+        try {
+            const actions = [{
+                type: 'add_column',
+                table: tableKey,
+                column: columnData
+            }];
+
+            const response = await schemaAPI.applyEREdits(actions);
+
+            if (response.success) {
+                onSchemaUpdate(response.schema, response.ddl);
+
+            } else {
+                throw new Error(response.errors?.join(', ') || 'Failed to add column');
+            }
+
+        } catch (error) {
+            console.error('Failed to add column:', error);
+            throw error;
+        }
+    };
+
+    const handleEditColumn = async (columnData) => {
+        if (!editingColumn) return;
+
+        try {
+            const actions = [{
+                type: 'rename_column',
+                table: tableKey,
+                old_col: editingColumn.name,
+                new_col: columnData.name
+            }];
+
+            const response = await schemaAPI.applyEREdits(actions);
+
+            if (response.success) {
+                onSchemaUpdate(response.schema, response.ddl);
+
+            } else {
+                throw new Error(response.errors?.join(', ') || 'Failed to edit column');
+            }
+
+        } catch (error) {
+            console.error('Failed to edit column:', error);
+            throw error;
+        }
+    };
+
+    const handleDeleteColumn = async (columnName) => {
+        if (!window.confirm(`Are you sure you want to delete column "${columnName}"?`)) {
+            return;
+        }
+
+        try {
+            const actions = [{
+                type: 'drop_column',
+                table: tableKey,
+                column_name: columnName,
+                force: false
+            }];
+
+            const response = await schemaAPI.applyEREdits(actions);
+
+            if (response.success) {
+                onSchemaUpdate(response.schema, response.ddl);
+
+            } else {
+                throw new Error(response.errors?.join(', ') || 'Failed to delete column');
+            }
+
+        } catch (error) {
+            console.error('Failed to delete column:', error);
+            alert(`Failed to delete column: ${error.message}`);
+        }
+    };
+
+    const handleAddRelationship = async (relationshipData) => {
+        try {
+            const actions = [{
+                type: 'add_relationship',
+                from_table: relationshipData.from_table,
+                from_column: relationshipData.from_column,
+                to_table: relationshipData.to_table,
+                to_column: relationshipData.to_column
+            }];
+
+            const response = await schemaAPI.applyEREdits(actions);
+
+            if (response.success) {
+                onSchemaUpdate(response.schema, response.ddl);
+
+            } else {
+                throw new Error(response.errors?.join(', ') || 'Failed to add relationship');
+            }
+
+        } catch (error) {
+            console.error('Failed to add relationship:', error);
+            throw error;
+        }
+    };
+
+    const handleDeleteRelationship = async (relationship) => {
+        if (!window.confirm(`Are you sure you want to delete the relationship from ${relationship.from_column} to ${relationship.to_table}.${relationship.to_column}?`)) {
+            return;
+        }
+
+        try {
+            const actions = [{
+                type: 'remove_relationship',
+                from_table: relationship.from_table,
+                from_column: relationship.from_column,
+                to_table: relationship.to_table,
+                to_column: relationship.to_column
+            }];
+
+            const response = await schemaAPI.applyEREdits(actions);
+
+            if (response.success) {
+                onSchemaUpdate(response.schema, response.ddl);
+
+            } else {
+                throw new Error(response.errors?.join(', ') || 'Failed to delete relationship');
+            }
+
+        } catch (error) {
+            console.error('Failed to delete relationship:', error);
+            alert(`Failed to delete relationship: ${error.message}`);
+        }
+    };
 
 
     return (
@@ -84,9 +222,23 @@ const TableDetailPanel = ({table, schema, onClose, onAskAboutTable}) => {
 
                 {/* columns */}
                 <div>
-                    <h4 className = "text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                        Columns ({table.columns.length})
-                    </h4>
+                    <div className = "flex items-center justify-between mb-2">
+                        <h4 className = "text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            Columns ({table.columns.length})
+                        </h4>
+
+                        <button
+                            onClick = {() => setShowAddColumnModal(true)}
+                            className = "text-xs bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-800/50 text-green-700 dark:text-green-300 px-2 py-1 rounded transition-colors flex items-center space-x-1"
+                            title = "Add new column"
+                        >
+                            <svg className = "w-3 h-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M12 4v16m8-8H4" />
+                            </svg>
+
+                            <span>Add</span>
+                        </button>
+                    </div>
 
                     <div className = "space-y-1">
                         {table.columns.map((column, idx) => (
@@ -122,6 +274,33 @@ const TableDetailPanel = ({table, schema, onClose, onAskAboutTable}) => {
                                         </div>
 
                                     </div>
+
+                                    {/*  CTAs */}
+                                    <div className = "flex items-center space-x-1">
+                                        <button
+                                            onClick = {() => {
+                                                setEditingColumn(column);
+                                                setShowEditColumnModal(true);
+                                            }}
+                                            className = "text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                                            title = "Edit column"
+                                        >
+                                            <svg className = "w-3 h-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                        </button>
+
+                                        <button
+                                            onClick = {() => handleDeleteColumn(column.name)}
+                                            className = "text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                            title = "Delete column"
+                                        >
+                                            <svg className = "w-3 h-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
+                                    </div>
+
                                 </div>
                             </div>
                         ))}
@@ -130,11 +309,27 @@ const TableDetailPanel = ({table, schema, onClose, onAskAboutTable}) => {
 
 
                 {/* relations */}
-                {(outgoingFKs.length > 0 || incomingFKs.length > 0) && (
-                    <div>
-                        <h4 className = "text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                <div>
+                    <div className = "flex items-center justify-between mb-2">
+                        <h4 className = "text-sm font-semibold text-gray-700 dark:text-gray-300">
                             Relationships
                         </h4>
+
+                        <button
+                            onClick = {() => setShowAddRelationshipModal(true)}
+                            className = "text-xs bg-purple-100 dark:bg-purple-900/30 hover:bg-purple-200 dark:hover:bg-purple-800/50 text-purple-700 dark:text-purple-300 px-2 py-1 rounded transition-colors flex items-center space-x-1"
+                            title = "Add new foreign key relationship"
+                        >
+                            <svg className = "w-3 h-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth  ={2} d = "M12 4v16m8-8H4" />
+                            </svg>
+
+                            <span>Add FK</span>
+                        </button>
+                    </div>
+
+                    {(outgoingFKs.length > 0 || incomingFKs.length > 0) ? (
+                        <div className="space-y-3">
 
                         {/* outgoing FKs, like the table that is being referenced from this table*/}
                         {outgoingFKs.length > 0 && (
@@ -146,22 +341,35 @@ const TableDetailPanel = ({table, schema, onClose, onAskAboutTable}) => {
                                 <div className = "space-y-1">
                                     {outgoingFKs.map((rel, idx) => (
                                         <div key = {idx} className = "text-xs p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
-                                            <div className = "flex items-center space-x-1">
-                                                <span className = "font-mono text-blue-700 dark:text-blue-400">
-                                                    {rel.from_column}
-                                                </span>
-                                                
-                                                <svg className = "w-3 h-3 text-blue-600 dark:text-blue-400" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
-                                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M14 5l7 7m0 0l-7 7m7-7H3" />
-                                                </svg>
-                                                
-                                                <span className = "font-mono text-blue-700 dark:text-blue-400">
-                                                    {rel.to_table}.{rel.to_column}
-                                                </span>
+                                            <div className = "flex items-center justify-between gap-2">
+                                                <div className = "flex items-center space-x-1 flex-1 min-w-0">
+                                                    <span className = "font-mono text-blue-700 dark:text-blue-400">
+                                                        {rel.from_column}
+                                                    </span>
+
+                                                    <svg className = "w-3 h-3 text-blue-600 dark:text-blue-400" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M14 5l7 7m0 0l-7 7m7-7H3" />
+                                                    </svg>
+
+                                                    <span className = "font-mono text-blue-700 dark:text-blue-400 truncate">
+                                                        {rel.to_table}.{rel.to_column}
+                                                    </span>
+                                                </div>
+
+                                                <button
+                                                    onClick = {() => handleDeleteRelationship(rel)}
+                                                    className = "text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex-shrink-0"
+                                                    title = "Delete relationship"
+                                                >
+                                                    <svg className = "w-3 h-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
+
                             </div>
                         )}
 
@@ -193,8 +401,13 @@ const TableDetailPanel = ({table, schema, onClose, onAskAboutTable}) => {
                                 </div>
                             </div>
                         )}
-                    </div>
-                )}
+                        </div>
+                    ) : (
+                        <div className = "text-xs text-gray-500 dark:text-gray-400 text-center py-4 bg-gray-50 dark:bg-slate-700/50 rounded">
+                            No relationships defined
+                        </div>
+                    )}
+                </div>
 
 
 
@@ -273,6 +486,32 @@ const TableDetailPanel = ({table, schema, onClose, onAskAboutTable}) => {
 
                 </div>
             </div>
+
+            <EditColumnModal
+                isOpen = {showAddColumnModal}
+                onClose = {() => setShowAddColumnModal(false)}
+                onSubmit = {handleAddColumn}
+                mode = "add"
+            />
+
+            <EditColumnModal
+                isOpen = {showEditColumnModal}
+                onClose = {() => {
+                    setShowEditColumnModal(false);
+                    setEditingColumn(null);
+                }}
+                onSubmit = {handleEditColumn}
+                column = {editingColumn}
+                mode = "edit"
+            />
+
+            <AddRelationshipModal
+                isOpen = {showAddRelationshipModal}
+                onClose = {() => setShowAddRelationshipModal(false)}
+                onSubmit = {handleAddRelationship}
+                schema = {schema}
+                currentTable = {table}
+            />
         </div>
     );
 };
