@@ -249,6 +249,36 @@ class CanonicalSchemaModel(BaseModel):
                 
             if rel.to_table == old_fully_qualified:
                 rel.to_table = new_fully_qualified
+                
+                
+                
+    def drop_table(self, name: str, schema: str = "public", force: bool = False) -> None:
+        fully_qualified_name = f"{schema}.{name}"
+        
+        if fully_qualified_name not in self.tables:
+            raise SchemaValidationError(f"Table '{fully_qualified_name}' does not exist.")        
+        
+        referenced_by = []
+        for rel in self.relationships:
+            if rel.to_table == fully_qualified_name:
+                referenced_by.append(rel)
+                
+        if referenced_by and not force:
+            fk_details = [f"{r.from_table}.{r.from_column}" for r in referenced_by]
+            raise SchemaValidationError(
+                f"Cannot drop table '{fully_qualified_name}'. "
+                f"It is referenced by foreign keys: {', '.join(fk_details)}. "
+                f"Use force=True to drop anyway."
+            )
+            
+        #remove table and all relations
+        del self.tables[fully_qualified_name]
+        
+        self.relationships = [
+            rel for rel in self.relationships
+            if rel.from_table != fully_qualified_name and rel.to_table != fully_qualified_name
+        ]
+        
     
         
     
