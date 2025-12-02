@@ -1,9 +1,56 @@
 from fastapi import APIRouter, HTTPException
-from app.models.schema_model import CanonicalSchemaModel
-from app.schema.cache import get_or_refresh_schema
+from pydantic import BaseModel, Field
+from typing import List, Optional, Any, Dict
+from app.models.schema_model import CanonicalSchemaModel, Column, SchemaValidationError
+from app.schema.cache import get_or_refresh_schema, set_cached_schema
 from app.db import get_connection
 
 router = APIRouter(prefix="/api/schema", tags=["schema"])
+
+
+
+class ERAction(BaseModel):
+    type: str
+    name: Optional[str] = None
+    schema: Optional[str] = "public"
+    table: Optional[str] = None
+    column: Optional[Dict[str, Any]] = None
+    old_name: Optional[str] = None
+    new_name: Optional[str] = None
+    old_col: Optional[str] = None
+    new_col: Optional[str] = None
+    column_name: Optional[str] = None
+    force: Optional[bool] = False
+    from_table: Optional[str] = None
+    from_column: Optional[str] = None
+    to_table: Optional[str] = None
+    to_column: Optional[str] = None
+    from_schema: Optional[str] = "public"
+    to_schema: Optional[str] = "public"
+
+
+class EREditRequest(BaseModel):
+    actions: List[ERAction]
+
+
+class EREditResponse(BaseModel):
+    success: bool
+    schema: Optional[Dict] = None
+    ddl: Optional[str] = None
+    errors: Optional[List[str]] = None
+
+
+
+class DDLEditRequest(BaseModel):
+    ddl: str
+
+
+class DDLEditResponse(BaseModel):
+    success: bool
+    schema: Optional[Dict] = None
+    ddl: Optional[str] = None
+    error: Optional[str] = None
+    details: Optional[str] = None
 
 
 #get schema model
@@ -112,3 +159,5 @@ def get_schema_ddl():
                 conn.close()
             except Exception:
                 pass
+
+
