@@ -1,9 +1,11 @@
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field, ConfigDict
+import sqlglot
+from sqlglot import exp
 
 
 VALID_POSTGRES_TYPES = {
-    'smallint', 'integer', 'bigint', 'decimal', 'numeric', 'real', 'double precision',
+    'smallint', 'integer', 'int', 'bigint', 'decimal', 'numeric', 'real', 'double precision',
     'smallserial', 'serial', 'bigserial', 'int2', 'int4', 'int8', 'float4', 'float8',
     'money',
     'character varying', 'varchar', 'character', 'char', 'text',
@@ -117,7 +119,105 @@ class CanonicalSchemaModel(BaseModel):
             ))
 
         return cls(tables = tables_dict, relationships = relationships_list)
-    
+
+    @classmethod
+    def from_ddl(cls, ddl_text: str) -> "CanonicalSchemaModel":
+        tables_dict = {}
+        relationships_list = []
+
+        try:
+            statements = sqlglot.parse(ddl_text, read = "postgres")
+
+        except Exception as e:
+            raise SchemaValidationError(f"Failed to parse DDL: {str(e)}")
+
+        if not statements:
+            return cls(tables={}, relationships=[])
+
+        for statement in statements:
+            if isinstance(statement, exp.Create) and statement.kind == "TABLE":
+                cls._process_create_table(statement, tables_dict)
+
+        for statement in statements:
+            if isinstance(statement, exp.Alter):
+                cls._process_alter_table(statement, tables_dict, relationships_list)
+
+        return cls(tables = tables_dict, relationships = relationships_list)
+
+    @classmethod
+    def _process_create_table(cls, statement: exp.Create, tables_dict: Dict[str, Table]) -> None:
+        table_expr = statement.this
+
+        if isinstance(table_expr, exp.Schema):
+            table_name_expr = table_expr.this
+        else:
+            table_name_expr = table_expr
+
+        # Get table name
+        if isinstance(table_name_expr, exp.Table):
+            table_name = table_name_expr.name
+            schema_name = table_name_expr.db or "public"
+            
+        else:
+            table_name = str(table_name_expr)
+            schema_name = "public"
+
+        columns = []
+        pk_columns = []
+
+
+        if isinstance(table_expr, exp.Schema):
+            for expr in table_expr.expressions:
+                if isinstance(expr, exp.ColumnDef):
+                    col_name = expr.this.name
+                    col_type = cls._extract_column_type(expr)
+                    nullable = cls._extract_nullable(expr)
+
+                    is_pk = cls._is_primary_key_inline(expr)
+                    if is_pk:
+                        pk_columns.append(col_name)
+
+                    columns.append(Column(
+                        name = col_name,
+                        type = col_type,
+                        is_pk = is_pk,
+                        is_fk = False, 
+                        nullable = nullable
+                    ))
+
+                elif isinstance(expr, exp.PrimaryKey):
+                    for col_expr in expr.expressions:
+                        col_name = col_expr.name if hasattr(col_expr, 'name') else str(col_expr)
+                        pk_columns.append(col_name)
+
+                elif isinstance(expr, exp.Constraint):
+                    for constraint_expr in expr.expressions:
+                        if isinstance(constraint_expr, exp.PrimaryKey):
+                            for col_expr in constraint_expr.expressions:
+                                if hasattr(col_expr, 'this'):
+                                    col_obj = col_expr.this if isinstance(col_expr.this, exp.Column) else col_expr
+                                    
+                                    if hasattr(col_obj, 'this') and hasattr(col_obj.this, 'name'):
+                                        col_name = col_obj.this.name
+                                    else:
+                                        col_name = str(col_obj)
+                                        
+                                elif hasattr(col_expr, 'name'):
+                                    col_name = col_expr.name
+                                else:
+                                    col_name = str(col_expr)
+                                    
+                                pk_columns.append(col_name)
+
+        for col in columns:
+            if col.name in pk_columns:
+                col.is_pk = True
+
+        fully_qualified_name = f"{schema_name}.{table_name}"
+        table = Table(name = table_name, schema = schema_name, columns = columns, row_count = None)
+
+        tables_dict[fully_qualified_name] = table
+
 
 
     #turn model -> json dict or other for api
