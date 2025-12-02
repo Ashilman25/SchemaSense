@@ -150,8 +150,8 @@ def test_refresh_schema_runs_all_introspection():
     assert table.name == "customers"
     assert len(table.columns) == 2
 
-    # Verify all introspection functions were called (3 cursor creations)
-    assert conn.cursor_count == 3
+    # Verify all introspection functions were called (4 cursor creations: tables, pks, fks, row_counts)
+    assert conn.cursor_count == 4
 
 
 def test_refresh_schema_with_foreign_keys():
