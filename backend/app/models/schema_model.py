@@ -1,10 +1,33 @@
-# define the data classes or Pydantic models with fields 
-# but no logic; add stub methods (from_introspection, to_dict_for_api, apply_change) 
-# that just raise NotImplementedError/pass.
-
-
-from typing import Dict, List
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field, ConfigDict
+
+
+VALID_POSTGRES_TYPES = {
+    'smallint', 'integer', 'bigint', 'decimal', 'numeric', 'real', 'double precision',
+    'smallserial', 'serial', 'bigserial', 'int2', 'int4', 'int8', 'float4', 'float8',
+    'money',
+    'character varying', 'varchar', 'character', 'char', 'text',
+    'bytea',
+    'timestamp', 'timestamp without time zone', 'timestamp with time zone',
+    'date', 'time', 'time without time zone', 'time with time zone', 'interval',
+    'boolean', 'bool',
+    'enum',
+    'point', 'line', 'lseg', 'box', 'path', 'polygon', 'circle',
+    'cidr', 'inet', 'macaddr', 'macaddr8',
+    'bit', 'bit varying',
+    'tsvector', 'tsquery',
+    'uuid',
+    'xml',
+    'json', 'jsonb',
+    'array',
+    'int4range', 'int8range', 'numrange', 'tsrange', 'tstzrange', 'daterange',
+    'oid', 'regproc', 'regprocedure', 'regoper', 'regoperator', 'regclass',
+    'regtype', 'regrole', 'regnamespace', 'regconfig', 'regdictionary'
+}
+
+
+class SchemaValidationError(Exception):
+    pass
 
 
 class Column(BaseModel):
