@@ -85,3 +85,30 @@ def get_sample_rows(table: str, limit: int = 10):
             conn.close()
 
 
+@router.get('/ddl')
+def get_schema_ddl():
+    conn = None
+    try:
+        conn = get_connection()
+
+        schema_model = get_or_refresh_schema(conn)
+        ddl_text = schema_model.to_ddl()
+
+        return {
+            "ddl": ddl_text,
+            "table_count": len(schema_model.tables),
+            "relationship_count": len(schema_model.relationships)
+        }
+
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=f"Database connection unavailable: {str(e)}")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate DDL: {str(e)}")
+
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass

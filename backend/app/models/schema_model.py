@@ -1,9 +1,11 @@
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field, ConfigDict
+import sqlglot
+from sqlglot import exp
 
 
 VALID_POSTGRES_TYPES = {
-    'smallint', 'integer', 'bigint', 'decimal', 'numeric', 'real', 'double precision',
+    'smallint', 'integer', 'int', 'bigint', 'decimal', 'numeric', 'real', 'double precision',
     'smallserial', 'serial', 'bigserial', 'int2', 'int4', 'int8', 'float4', 'float8',
     'money',
     'character varying', 'varchar', 'character', 'char', 'text',
@@ -117,7 +119,237 @@ class CanonicalSchemaModel(BaseModel):
             ))
 
         return cls(tables = tables_dict, relationships = relationships_list)
+
+    @classmethod
+    def from_ddl(cls, ddl_text: str) -> "CanonicalSchemaModel":
+        tables_dict = {}
+        relationships_list = []
+
+        try:
+            statements = sqlglot.parse(ddl_text, read = "postgres")
+
+        except Exception as e:
+            raise SchemaValidationError(f"Failed to parse DDL: {str(e)}")
+
+        if not statements:
+            return cls(tables={}, relationships=[])
+
+        for statement in statements:
+            if isinstance(statement, exp.Create) and statement.kind == "TABLE":
+                cls._process_create_table(statement, tables_dict)
+
+        for statement in statements:
+            if isinstance(statement, exp.Alter):
+                cls._process_alter_table(statement, tables_dict, relationships_list)
+
+        return cls(tables = tables_dict, relationships = relationships_list)
+
+    @classmethod
+    def _process_create_table(cls, statement: exp.Create, tables_dict: Dict[str, Table]) -> None:
+        table_expr = statement.this
+
+        if isinstance(table_expr, exp.Schema):
+            table_name_expr = table_expr.this
+        else:
+            table_name_expr = table_expr
+
+        # Get table name
+        if isinstance(table_name_expr, exp.Table):
+            table_name = table_name_expr.name
+            schema_name = table_name_expr.db or "public"
+            
+        else:
+            table_name = str(table_name_expr)
+            schema_name = "public"
+
+        columns = []
+        pk_columns = []
+
+
+        if isinstance(table_expr, exp.Schema):
+            for expr in table_expr.expressions:
+                if isinstance(expr, exp.ColumnDef):
+                    col_name = expr.this.name
+                    col_type = cls._extract_column_type(expr)
+                    nullable = cls._extract_nullable(expr)
+
+                    is_pk = cls._is_primary_key_inline(expr)
+                    if is_pk:
+                        pk_columns.append(col_name)
+
+                    columns.append(Column(
+                        name = col_name,
+                        type = col_type,
+                        is_pk = is_pk,
+                        is_fk = False, 
+                        nullable = nullable
+                    ))
+
+                elif isinstance(expr, exp.PrimaryKey):
+                    for col_expr in expr.expressions:
+                        col_name = col_expr.name if hasattr(col_expr, 'name') else str(col_expr)
+                        pk_columns.append(col_name)
+
+                elif isinstance(expr, exp.Constraint):
+                    for constraint_expr in expr.expressions:
+                        if isinstance(constraint_expr, exp.PrimaryKey):
+                            for col_expr in constraint_expr.expressions:
+                                if hasattr(col_expr, 'this'):
+                                    col_obj = col_expr.this if isinstance(col_expr.this, exp.Column) else col_expr
+                                    
+                                    if hasattr(col_obj, 'this') and hasattr(col_obj.this, 'name'):
+                                        col_name = col_obj.this.name
+                                    else:
+                                        col_name = str(col_obj)
+                                        
+                                elif hasattr(col_expr, 'name'):
+                                    col_name = col_expr.name
+                                else:
+                                    col_name = str(col_expr)
+                                    
+                                pk_columns.append(col_name)
+
+        for col in columns:
+            if col.name in pk_columns:
+                col.is_pk = True
+
+        fully_qualified_name = f"{schema_name}.{table_name}"
+        table = Table(name = table_name, schema = schema_name, columns = columns, row_count = None)
+
+        tables_dict[fully_qualified_name] = table
+        
+        
     
+    @classmethod
+    def _process_alter_table(cls, statement: exp.Alter, tables_dict: Dict[str, Table], relationships_list: List[Relationship]) -> None:
+        table_expr = statement.this
+
+        if isinstance(table_expr, exp.Table):
+            from_table_name = table_expr.name
+            from_schema = table_expr.db or "public"
+            
+        else:
+            from_table_name = str(table_expr)
+            from_schema = "public"
+
+        from_fqn = f"{from_schema}.{from_table_name}"
+        actions = statement.actions if hasattr(statement, 'actions') else statement.expressions
+
+        for action in actions:
+            if isinstance(action, exp.AddConstraint):
+                for constraint_expr in action.expressions:
+                    
+                    if isinstance(constraint_expr, exp.Constraint):
+                        actual_constraint = constraint_expr.expressions[0] if constraint_expr.expressions else None
+                        
+                        if actual_constraint and isinstance(actual_constraint, exp.ForeignKey):
+                            cls._process_foreign_key(actual_constraint, from_fqn, tables_dict, relationships_list)
+                            
+                    elif isinstance(constraint_expr, exp.ForeignKey):
+                        cls._process_foreign_key(constraint_expr, from_fqn, tables_dict, relationships_list)
+
+    @classmethod
+    def _process_foreign_key(cls, constraint: exp.ForeignKey, from_fqn: str, tables_dict: Dict[str, Table], relationships_list: List[Relationship]) -> None:
+        from_columns = [col.name for col in constraint.expressions]
+
+        reference = constraint.args.get('reference')
+        if isinstance(reference, exp.Reference):
+            to_table_expr = reference.this
+
+            to_columns = []
+            if isinstance(to_table_expr, exp.Schema):
+                to_columns = [col.name if hasattr(col, 'name') else str(col) for col in to_table_expr.expressions]
+                to_table_expr = to_table_expr.this
+
+            if isinstance(to_table_expr, exp.Table):
+                to_table_name = to_table_expr.name
+                to_schema = to_table_expr.db or "public"
+                
+            else:
+                to_table_name = str(to_table_expr)
+                to_schema = "public"
+
+            to_fqn = f"{to_schema}.{to_table_name}"
+
+            for i, from_col in enumerate(from_columns):
+                to_col = to_columns[i] if i < len(to_columns) else from_col
+
+                if from_fqn in tables_dict:
+                    from_table = tables_dict[from_fqn]
+                    
+                    for col in from_table.columns:
+                        if col.name == from_col:
+                            col.is_fk = True
+                            break
+
+                # Add relationship
+                relationships_list.append(Relationship(
+                    from_table = from_fqn,
+                    from_column = from_col,
+                    to_table = to_fqn,
+                    to_column = to_col
+                ))
+                
+                
+    
+    @classmethod
+    def _extract_column_type(cls, column_def: exp.ColumnDef) -> str:
+        if not column_def.kind:
+            return "text"  
+
+        type_expr = column_def.kind
+
+        if isinstance(type_expr, exp.DataType):
+            type_obj = type_expr.this
+            type_str = type_obj.value if hasattr(type_obj, 'value') else str(type_obj)
+
+            is_array = type_str.upper() == "ARRAY"
+
+            if is_array and type_expr.expressions:
+                nested_type = type_expr.expressions[0]
+                if isinstance(nested_type, exp.DataType):
+                    type_str = nested_type.this.value if hasattr(nested_type.this, 'value') else str(nested_type.this)
+
+                    if nested_type.expressions:
+                        params = [str(e) for e in nested_type.expressions]
+                        type_str += f"({','.join(params)})"
+    
+                else:
+                    type_str = str(nested_type)
+                    
+                type_str += "[]"
+            elif type_expr.expressions and not is_array:
+                params = [str(e) for e in type_expr.expressions]
+                type_str += f"({','.join(params)})"
+
+            return type_str.lower()
+
+        return str(type_expr).lower()
+
+    @classmethod
+    def _extract_nullable(cls, column_def: exp.ColumnDef) -> bool:
+        for constraint in column_def.constraints:
+            if isinstance(constraint, exp.NotNullColumnConstraint):
+                return False
+            
+            elif isinstance(constraint, exp.ColumnConstraint):
+                if isinstance(constraint.kind, exp.NotNullColumnConstraint):
+                    return False
+
+        return True
+
+    @classmethod
+    def _is_primary_key_inline(cls, column_def: exp.ColumnDef) -> bool:
+        for constraint in column_def.constraints:
+            if isinstance(constraint, exp.PrimaryKeyColumnConstraint):
+                return True
+            
+            elif isinstance(constraint, exp.ColumnConstraint):
+                if isinstance(constraint.kind, exp.PrimaryKeyColumnConstraint):
+                    return True
+                
+        return False
+
 
 
     #turn model -> json dict or other for api
@@ -136,7 +368,83 @@ class CanonicalSchemaModel(BaseModel):
         }
 
         return api_data
+    
+    
+    def to_ddl(self) -> str:
+        ddl_statements = []
         
+        sorted_tables = sorted(self.tables.items(), key = lambda x: x[0])
+        
+        for _, table in sorted_tables:
+            ddl_statements.append(self._generate_create_table_statement(table))
+            
+        fk_statements = self._generate_foreign_key_statements()
+        if fk_statements:
+            ddl_statements.extend(fk_statements)
+            
+        
+        return "\n\n".join(ddl_statements)
+    
+    
+    def _generate_create_table_statement(self, table: Table) -> str:
+        lines = []
+        
+        fully_qualified = f"{table.schema}.{table.name}"
+        lines.append(f"CREATE TABLE {fully_qualified} (")
+        
+        column_lines = []
+        pk_columns = []
+        
+        for col in table.columns:
+            col_parts = [f"    {col.name}", col.type]
+            
+            if not col.nullable:
+                col_parts.append("NOT NULL")
+                
+            column_lines.append(" ".join(col_parts))
+            
+            if col.is_pk:
+                pk_columns.append(col.name)
+                
+        if pk_columns:
+            pk_constraint_name = f"{table.name}_pkey"
+            pk_columns_str = ", ".join(pk_columns)
+            column_lines.append(f"    CONSTRAINT {pk_constraint_name} PRIMARY KEY ({pk_columns_str})")
+            
+        lines.append(",\n".join(column_lines))
+        lines.append(");")
+        return "\n".join(lines)
+    
+    def _generate_foreign_key_statements(self) -> List[str]:
+        fk_statements = []
+        relationships_by_table = {}
+        
+        for rel in self.relationships:
+            if rel.from_table not in relationships_by_table:
+                relationships_by_table[rel.from_table] = []
+                
+            relationships_by_table[rel.from_table].append(rel)
+
+
+        for from_table in sorted(relationships_by_table.keys()):
+            for rel in relationships_by_table[from_table]:
+                fk_statements.append(self._generate_single_fk_statement(rel))
+
+        return fk_statements
+    
+    def _generate_single_fk_statement(self, rel: Relationship) -> str:
+        from_table_name = rel.from_table.split(".")[-1]
+        constraint_name = f"{from_table_name}_{rel.from_column}_fkey"
+
+        statement = (
+            f"ALTER TABLE {rel.from_table}\n"
+            f"    ADD CONSTRAINT {constraint_name}\n"
+            f"    FOREIGN KEY ({rel.from_column})\n"
+            f"    REFERENCES {rel.to_table} ({rel.to_column});"
+        )
+
+        return statement
+
 
     #change the model according to schema edits
     def apply_change(self, *_args, **_kwargs) -> None:
