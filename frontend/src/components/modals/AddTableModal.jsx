@@ -225,9 +225,30 @@ const AddTableModal = ({isOpen, onClose, onSubmit}) => {
                     </div>
 
 
+                    {/* err msg */}
+                    {error && (
+                        <div className = "mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <p className = "text-sm text-red-600 dark:text-red-400">{error}</p>
+                        </div>
+                    )}
 
+                    {/* actions */}
+                    <div className = "flex items-center justify-end space-x-3">
+                        <button
+                            type = "button"
+                            onClick = {handleClose}
+                            className = "px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg transition-colors"
+                        >
+                            Cancel
+                        </button>
 
-
+                        <button
+                            type = "submit"
+                            className = "px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 text-white rounded-lg transition-colors"
+                        >
+                            Add Table
+                        </button>
+                    </div>
 
 
                 </form>
