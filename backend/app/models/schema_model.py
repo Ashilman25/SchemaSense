@@ -207,6 +207,49 @@ class CanonicalSchemaModel(BaseModel):
         return outgoing
     
     
+    
+    
+    #TABLE MUTATION METHODS
+    
+    def add_table(self, name: str, schema: str = "public", columns: Optional[List[Column]] = None) -> None:
+        fully_qualified_name = f"{schema}.{name}"
+        
+        #check dupes
+        if fully_qualified_name in self.tables:
+            raise SchemaValidationError(f"Table '{fully_qualified_name}' already exists in schema '{schema}'.")
+        
+        if columns:
+            for col in columns:
+                self._validate_column_type(col.type)
+                
+        new_table = Table(name = name, schema = schema, columns = columns or [], row_count = None)
+        self.tables[fully_qualified_name] = new_table
+        
+        
+        
+    def rename_table(self, old_name: str, new_name: str, schema: str = "public") -> None:
+        old_fully_qualified = f"{schema}.{old_name}"
+        new_fully_qualified = f"{schema}.{new_name}"
+        
+        if old_fully_qualified not in self.tables:
+            raise SchemaValidationError(f"Table '{old_fully_qualified}' does not exist.")
+        
+        if new_fully_qualified in self.tables:
+            raise SchemaValidationError(f"Table '{new_fully_qualified}' already exists. Cannot rename.")
+        
+        table = self.tables[old_fully_qualified]
+        table.name = new_name
+        
+        self.tables[new_fully_qualified] = table
+        del self.tables[old_fully_qualified]
+        
+        for rel in self.relationships:
+            if rel.from_table == old_fully_qualified:
+                rel.from_table = new_fully_qualified
+                
+            if rel.to_table == old_fully_qualified:
+                rel.to_table = new_fully_qualified
+    
         
     
     
