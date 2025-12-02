@@ -130,6 +130,106 @@ const AddTableModal = ({isOpen, onClose, onSubmit}) => {
                         </div>
                     </div>
 
+
+                    {/* columns */}
+                    <div className = "mb-6">
+                        <div className = "flex items-center justify-between mb-3">
+                            <label className = "block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Columns
+                            </label>
+                            
+                            <button
+                                type = "button"
+                                onClick = {handleAddColumn}
+                                className = "text-sm bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1 rounded transition-colors flex items-center space-x-1"
+                            >
+                                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M12 4v16m8-8H4" />
+                                </svg>
+
+                                <span>Add Column</span>
+                            </button>
+                        </div>
+
+                        <div className = "space-y-3">
+                            {columns.map((column, index) => (
+                                <div key = {index} className = "p-3 border border-gray-200 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700/50">
+                                    <div className = "grid grid-cols-2 gap-3 mb-2">
+                                        <div>
+                                            <label className = "block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                                Column Name
+                                            </label>
+
+                                            <input
+                                                type = "text"
+                                                value = {column.name}
+                                                onChange = {(e) => handleColumnChange(index, 'name', e.target.value)}
+                                                className = "w-full px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100"
+                                                placeholder = "e.g., email, price"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className = "block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                                Type
+                                            </label>
+
+                                            <input
+                                                type = "text"
+                                                value = {column.type}
+                                                onChange = {(e) => handleColumnChange(index, 'type', e.target.value)}
+                                                className = "w-full px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100"
+                                                placeholder = "e.g., varchar, integer"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className = "flex items-center justify-between">
+                                        <div className = "flex items-center space-x-4">
+                                            <label className = "flex items-center space-x-1 text-xs text-gray-700 dark:text-gray-300">
+                                                <input
+                                                    type = "checkbox"
+                                                    checked = {column.is_pk}
+                                                    onChange = {(e) => handleColumnChange(index, 'is_pk', e.target.checked)}
+                                                    className = "rounded border-gray-300 dark:border-slate-600"
+                                                />
+
+                                                <span>Primary Key</span>
+                                            </label>
+
+                                            <label className = "flex items-center space-x-1 text-xs text-gray-700 dark:text-gray-300">
+                                                <input
+                                                    type = "checkbox"
+                                                    checked = {column.nullable}
+                                                    onChange = {(e) => handleColumnChange(index, 'nullable', e.target.checked)}
+                                                    className = "rounded border-gray-300 dark:border-slate-600"
+                                                />
+
+                                                <span>Nullable</span>
+                                            </label>
+                                        </div>
+
+                                        {columns.length > 1 && (
+                                            <button
+                                                type = "button"
+                                                onClick = {() => handleRemoveColumn(index)}
+                                                className = "text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-xs"
+                                            >
+                                                Remove
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+
+
+
+
+
+
                 </form>
             </div>
         </div>
