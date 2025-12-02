@@ -26,7 +26,7 @@ const TableNode = memo(({data, selected}) => {
             {/* table header */}
             <div
                 className = "bg-blue-600 dark:bg-blue-700 text-white px-3 py-2 rounded-t-lg cursor-pointer"
-                onContextMenu={(e) => onContextMenu && onContextMenu(e, nodeId)}
+                onContextMenu = {(e) => onContextMenu && onContextMenu(e, nodeId)}
             >
                 <div className = "font-semibold text-sm truncate" title = {`${schema}.${tableName}`}>
                     {tableName}
