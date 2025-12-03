@@ -106,6 +106,83 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
         }
     };
 
+    const fetchDDL = async () => {
+        setIsDdlLoading(true);
+
+        try {
+            const data = await schemaAPI.getDDL();
+            setDdlText(data.ddl);
+            setEditedDdlText(data.ddl);
+
+        } catch (err) {
+            console.error("Failed to fetch DDL: ", err);
+            setNotification({
+                type: "error",
+                message: `Failed to load DDL: ${err.message || 'Unknown error'}`
+            });
+
+            setTimeout(() => setNotification(null), 5000);
+
+        } finally {
+            setIsDdlLoading(false);
+        }
+    };
+
+    const handleApplyDDL = async () => {
+        if (!editedDdlText.trim()) {
+            setNotification({
+                type: 'error',
+                message: 'DDL text cannot be empty'
+            });
+
+            setTimeout(() => setNotification(null), 3000);
+            return;
+        }
+
+        setIsDdlApplying(true);
+        
+        try {
+            const response = await schemaAPI.applyDDLEdit(editedDdlText);
+
+            if (response.success) {
+                setDdlText(response.ddl);
+                setEditedDdlText(response.ddl);
+
+                if (onSchemaUpdate) {
+                    onSchemaUpdate(response.schema, response.ddl);
+                }
+
+                setNotification({
+                    type: 'success',
+                    message: 'Schema updated from SQL'
+                });
+
+                setTimeout(() => setNotification(null), 5000);
+
+            } else {
+                const errorMsg = response.details || response.error || 'Failed to apply DDL';
+                setNotification({
+                    type: 'error',
+                    message: errorMsg
+                });
+
+                setTimeout(() => setNotification(null), 8000);
+            }
+
+        } catch (err) {
+            console.error('Failed to apply DDL: ', err);
+            setNotification({
+                type: 'error',
+                message: `Failed to apply DDL: ${err.message || 'Unknown error'}`
+            });
+
+            setTimeout(() => setNotification(null), 8000);
+
+        } finally {
+            setIsDdlApplying(false);
+        }
+    };
+
 
 
 
