@@ -23,6 +23,47 @@ class HistoryItemResponse(BaseModel):
     sql: Optional[str]
     status: str
     execution_duration_ms: Optional[int]
+    
+    
+
+def _init_history_table():
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("CREATE SCHEMA IF NOT EXISTS schemasense;")
+        
+        cursor.execute("""
+                       CREATE TABLE IF NOT EXISTS schemasense.query_history(
+                           id SERIAL PRIMARY KEY,
+                           timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                           question TEXT NOT NULL,
+                           sql TEXT,
+                           status VARCHAR(50) NOT NULL DEFAULT 'pending',
+                           execution_duration_ms INTEGER,
+                           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                       );
+                       """)
+        
+        cursor.execute("""
+                       CREATE INDEX IF NOT EXISTS idx_query_history_timestamp
+                       ON schemasense.query_history(timestamp DESC);
+                       """)
+        
+        cursor.execute("""
+                       CREATE INDEX IF NOT EXISTS idx_query_history_status
+                       ON schemasense.query_history(status);
+                       """)
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+    except Exception:
+        pass    
+    
+    
+
 
 
 
