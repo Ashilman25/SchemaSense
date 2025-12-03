@@ -64,24 +64,30 @@ def _init_history_table():
     
     
 
-
-
-
-
-_history: List[HistoryItem] = []
-
-
-#get in memory list of recorded history items
-@router.get("")
-def list_history():
-    return _history
-
-
-#add new history entry
-@router.post("")
-def add_history(item: HistoryItem):
-    _history.append(item)
-    return {
-        "saved": True, 
-        "count": len(_history)
+@router.post("", response_model = dict)
+def add_history(item: HistoryItemCreate):
+    try:
+        _init_history_table()
+        
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+                       INSERT INTO schemasense.query_history (question, sql, status, execution_duration_ms)
+                       VALUES (%s, %s, %s, %s)
+                       RETURNING id
+                       """, (item.question, item.sql, item.status, item.execution_duration_ms))
+        
+        history_id = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        return {
+            "saved" : True,
+            "id" : history_id
         }
+    
+    
+    except Exception as e:
+        raise HTTPException(status_code = 500, detail = f"Failed to save history: {str(e)}")
