@@ -91,3 +91,44 @@ def add_history(item: HistoryItemCreate):
     
     except Exception as e:
         raise HTTPException(status_code = 500, detail = f"Failed to save history: {str(e)}")
+    
+    
+    
+    
+@router.get("", response_model = List[HistoryItemResponse])
+def list_history(limit: int = 50):
+    try:
+        limit = min(limit, 200) #might change limit idk
+        _init_history_table()
+        
+        conn = get_connection()
+        cursor = conn.cursor(cursor_factory = RealDictCursor) #makes it return the rows as dicts instead of tuples
+        
+        cursor.execute("""
+                       SELECT id, timestamp, question, sql, status, execution_duration_ms
+                       FROM schemasense.query_history
+                       ORDER BY timestamp DESC
+                       LIMIT %s
+                       """, (limit,))
+        
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        #convert to the history item response format
+        history = []
+        for each in rows:
+            id = each["id"]
+            timestamp = each["timestamp"]
+            question = each["question"]
+            sql = each["sql"]
+            status = each["status"]
+            execution_duration_ms = each["execution_duration_ms"]
+            
+            history.append(HistoryItemResponse(id, timestamp, question, sql, status, execution_duration_ms))
+            
+            
+        return history
+    
+    except Exception as e:
+        raise HTTPException(status_code = 500, detail = f"Failed to retrieve history: {str(e)}")
