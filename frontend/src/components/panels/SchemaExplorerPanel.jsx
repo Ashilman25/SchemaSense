@@ -1,8 +1,8 @@
-import {useState, useEffect} from "react";
+import {useState, useEffect, useCallback} from "react";
 import { schemaAPI } from "../../utils/api";
 import ERDiagram from "../diagram/ERDiagram";
 
-const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger }) => {
+const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, onSchemaChange, onRegisterUpdateCallback }) => {
     const [activeTab, setActiveTab] = useState('tables')
     const [schema, setSchema] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -23,6 +23,32 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
 
     }, [isDbConnected, refreshTrigger]);
 
+
+    useEffect(() => {
+        if (schema && onSchemaChange) {
+            onSchemaChange(schema);
+        }
+    }, [schema]); 
+
+    const handleSchemaUpdate = useCallback((newSchema, newDDL) => {
+        setSchema(newSchema);
+
+        setNotification({
+            type: 'success',
+            message: 'Changes saved to virtual schema (not applied to DB)'
+        });
+
+        setTimeout(() => {
+            setNotification(null);
+        }, 5000);
+    }, []);
+
+    useEffect(() => {
+        if (onRegisterUpdateCallback) {
+            onRegisterUpdateCallback(handleSchemaUpdate);
+        }
+    }, [handleSchemaUpdate, onRegisterUpdateCallback]);
+
     const fetchSchema = async () => {
         setLoading(true);
         setError(null);
@@ -38,18 +64,6 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
         } finally {
             setLoading(false);
         }
-    };
-
-    const handleSchemaUpdate = (newSchema, newDDL) => {
-        setSchema(newSchema);
-        setNotification({
-            type: 'success',
-            message: 'Changes saved to virtual schema (not applied to DB)'
-        });
-
-        setTimeout(() => {
-            setNotification(null);
-        }, 5000);
     };
 
     const toggleTable = (tableKey) => {
@@ -311,7 +325,6 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
             {/* tabs */}
             <div className = "border-b border-gray-200 dark:border-slate-700">
                 <div className = "flex space-x-1 px-4">
-
                     <button
                         onClick = {() => setActiveTab('tables')}
                         className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
@@ -474,7 +487,6 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
                         )}
                     </div>
                 )}
-
 
             </div>
         </div>
