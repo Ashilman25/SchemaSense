@@ -8,7 +8,7 @@ import { sqlAPI, schemaAPI } from '../../utils/api';
 import QueryPlanVisualization from '../QueryPlanVisualization';
 
 
-const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema, onSchemaUpdate }) => {
+const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema, currentDdl, onSchemaUpdate }) => {
     const {theme} = useTheme();
     const [activeTab, setActiveTab] = useState('query');
     const [querySql, setQuerySql] = useState('-- Your generated SQL will appear here');
@@ -184,19 +184,18 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
     };
 
 
-    //when sql tab is open, get the ddl
+    //when sql tab is open and no DDL yet, or when DDL updates from undo/redo
     useEffect(() => {
-        if (activeTab === 'schema' && isDbConnected && !ddlText.startsWith('CREATE')) {
-            fetchDDL();
-        }
-    }, [activeTab, isDbConnected]);
+        if (activeTab === 'schema' && isDbConnected) {
+            if (currentDdl) {
+                setDdlText(currentDdl);
+                setEditedDdlText(currentDdl);
 
-    //auto refresh when diagram changes
-    useEffect(() => {
-        if (activeTab === 'schema' && isDbConnected && currentSchema && ddlText.startsWith('CREATE')) {
-            fetchDDL();
+            } else if (!ddlText.startsWith('CREATE')) {
+                fetchDDL();
+            }
         }
-    }, [currentSchema]);
+    }, [activeTab, isDbConnected, currentDdl]);
 
 
 
