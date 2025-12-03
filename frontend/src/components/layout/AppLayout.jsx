@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {useState, useCallback} from 'react'
 import TopNavBar from './TopNavBar'
 import QueryBuilderPanel from '../panels/QueryBuilderPanel'
 import SQLResultsPanel from '../panels/SQLResultsPanel'
@@ -12,6 +12,10 @@ const AppLayout = () => {
 
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [shouldRefreshSchema, setShouldRefreshSchema] = useState(0);
+
+  const [currentSchema, setCurrentSchema] = useState(null);
+  const [currentDdl, setCurrentDdl] = useState(null);
+  const [schemaUpdateCallback, setSchemaUpdateCallback] = useState(null);
 
   const handleSqlGenerated = (sql, warnings = []) => {
     setGeneratedSql(sql);
@@ -32,6 +36,15 @@ const AppLayout = () => {
       setShouldRefreshSchema(prev => prev + 1);
     }
   };
+
+  const handleSchemaChange = useCallback((newSchema, newDdl) => {
+    setCurrentSchema(newSchema);
+    setCurrentDdl(newDdl);
+  }, []);
+
+  const handleSchemaUpdateCallbackRegister = useCallback((callback) => {
+    setSchemaUpdateCallback(() => callback);
+  }, []);
 
   return (
     <div className = "h-screen flex flex-col bg-gray-50 dark:bg-slate-900 transition-colors">
@@ -56,6 +69,10 @@ const AppLayout = () => {
             <SQLResultsPanel
               generatedSql = {generatedSql}
               warnings = {sqlWarnings}
+              isDbConnected = {isDbConnected}
+              currentSchema = {currentSchema}
+              currentDdl = {currentDdl}
+              onSchemaUpdate = {schemaUpdateCallback}
             />
           </div>
 
@@ -65,6 +82,8 @@ const AppLayout = () => {
               onAskAboutTable = {handleAskAboutTable}
               isDbConnected = {isDbConnected}
               refreshTrigger = {shouldRefreshSchema}
+              onSchemaChange = {handleSchemaChange}
+              onRegisterUpdateCallback = {handleSchemaUpdateCallbackRegister}
             />
           </div>
 

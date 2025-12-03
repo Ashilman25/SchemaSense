@@ -4,15 +4,14 @@ import {sql} from '@codemirror/lang-sql';
 import {oneDark} from '@codemirror/theme-one-dark';
 import {useTheme} from '../../context/ThemeContext';
 import {format} from 'sql-formatter';
-import { sqlAPI } from '../../utils/api';
+import { sqlAPI, schemaAPI } from '../../utils/api';
 import QueryPlanVisualization from '../QueryPlanVisualization';
 
 
-const SQLResultsPanel = ({ generatedSql, warnings }) => {
+const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema, currentDdl, onSchemaUpdate }) => {
     const {theme} = useTheme();
     const [activeTab, setActiveTab] = useState('query');
     const [querySql, setQuerySql] = useState('-- Your generated SQL will appear here');
-    const [schemaSql, setSchemaSql] = useState('-- Schema DDL will appear here once connected');
     const [isEditable, setIsEditable] = useState(false);
 
     const [queryResults, setQueryResults] = useState(null);
@@ -22,6 +21,13 @@ const SQLResultsPanel = ({ generatedSql, warnings }) => {
     const [queryPlan, setQueryPlan] = useState(null);
     const [planError, setPlanError] = useState('');
     const [isPlanLoading, setIsPlanLoading] = useState(false);
+
+    // Schema SQL tab state
+    const [ddlText, setDdlText] = useState('-- Schema DDL will appear here');
+    const [editedDdlText, setEditedDdlText] = useState('');
+    const [isDdlLoading, setIsDdlLoading] = useState(false);
+    const [isDdlApplying, setIsDdlApplying] = useState(false);
+    const [notification, setNotification] = useState(null);
 
     useEffect(() => {
         if (generatedSql) {
@@ -99,6 +105,97 @@ const SQLResultsPanel = ({ generatedSql, warnings }) => {
             setIsPlanLoading(false);
         }
     };
+
+    const fetchDDL = async () => {
+        setIsDdlLoading(true);
+
+        try {
+            const data = await schemaAPI.getDDL();
+            setDdlText(data.ddl);
+            setEditedDdlText(data.ddl);
+
+        } catch (err) {
+            console.error("Failed to fetch DDL: ", err);
+            setNotification({
+                type: "error",
+                message: `Failed to load DDL: ${err.message || 'Unknown error'}`
+            });
+
+            setTimeout(() => setNotification(null), 5000);
+
+        } finally {
+            setIsDdlLoading(false);
+        }
+    };
+
+    const handleApplyDDL = async () => {
+        if (!editedDdlText.trim()) {
+            setNotification({
+                type: 'error',
+                message: 'DDL text cannot be empty'
+            });
+
+            setTimeout(() => setNotification(null), 3000);
+            return;
+        }
+
+        setIsDdlApplying(true);
+        
+        try {
+            const response = await schemaAPI.applyDDLEdit(editedDdlText);
+
+            if (response.success) {
+                setDdlText(response.ddl);
+                setEditedDdlText(response.ddl);
+
+                if (onSchemaUpdate) {
+                    onSchemaUpdate(response.schema, response.ddl);
+                }
+
+                setNotification({
+                    type: 'success',
+                    message: 'Schema updated from SQL'
+                });
+
+                setTimeout(() => setNotification(null), 5000);
+
+            } else {
+                const errorMsg = response.details || response.error || 'Failed to apply DDL';
+                setNotification({
+                    type: 'error',
+                    message: errorMsg
+                });
+
+                setTimeout(() => setNotification(null), 8000);
+            }
+
+        } catch (err) {
+            console.error('Failed to apply DDL: ', err);
+            setNotification({
+                type: 'error',
+                message: `Failed to apply DDL: ${err.message || 'Unknown error'}`
+            });
+
+            setTimeout(() => setNotification(null), 8000);
+
+        } finally {
+            setIsDdlApplying(false);
+        }
+    };
+
+
+    //when sql tab is open and no DDL yet, or when DDL updates from undo/redo
+    useEffect(() => {
+        if (activeTab === 'schema' && isDbConnected) {
+            if (currentDdl) {
+                setDdlText(currentDdl);
+                setEditedDdlText(currentDdl);
+
+            } else if (!ddlText.startsWith('CREATE')) {
+                fetchDDL();
+            }
+        }
+    }, [activeTab, isDbConnected, currentDdl]);
 
 
 
@@ -396,33 +493,189 @@ const SQLResultsPanel = ({ generatedSql, warnings }) => {
                 )}
 
                 {activeTab === 'schema' && (
-                    <div className = "h-full">
+                    <div className = "h-full flex flex-col">
+                        {!isDbConnected ? (
+                            <div className = "flex flex-col items-center justify-center h-full py-8 px-4 text-center">
+                                <svg className = "w-12 h-12 text-gray-400 dark:text-gray-500 mb-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                                </svg>
+                                <p className = "text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                    No database connected
+                                </p>
+                                <p className = "text-xs text-gray-500 dark:text-gray-500">
+                                    Click the settings icon in the top right to connect to a database
+                                </p>
+                            </div>
+                        ) : (
+                            <>
+                                {/* Notification banner */}
+                                {notification && (
+                                    <div className = {`mb-4 p-3 ${
+                                        notification.type === 'success'
+                                            ? 'bg-green-100 dark:bg-green-900/30 border border-green-200 dark:border-green-800'
+                                            : 'bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800'
+                                    } rounded-lg`}>
+                                        <div className = "flex items-center justify-between">
+                                            <div className = "flex items-center space-x-2">
+                                                {notification.type === 'success' ? (
+                                                    <svg className = "w-5 h-5 text-green-600 dark:text-green-400" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                ) : (
+                                                    <svg className = "w-5 h-5 text-red-600 dark:text-red-400" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                )}
+                                                <span className = {`text-sm font-medium ${
+                                                    notification.type === 'success'
+                                                        ? 'text-green-800 dark:text-green-200'
+                                                        : 'text-red-800 dark:text-red-200'
+                                                }`}>
+                                                    {notification.message}
+                                                </span>
+                                            </div>
+                                            <button
+                                                onClick = {() => setNotification(null)}
+                                                className = {`${
+                                                    notification.type === 'success'
+                                                        ? 'text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300'
+                                                        : 'text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300'
+                                                }`}
+                                            >
+                                                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
 
-                        {/* schema editor */}
-                        <div className = "h-full min-h-[400px] rounded-lg border border-gray-200 dark:border-slate-600 overflow-hidden">
-                            <CodeMirror
-                                value = {schemaSql}
-                                height = "100%"
-                                minHeight = "400px"
-                                extensions = {[sql()]}
-                                onChange = {(value) => setSchemaSql(value)}
-                                editable = {false}
-                                readOnly = {true}
-                                theme = {theme === 'dark' ? oneDark : 'light'}
-                                basicSetup = {{
-                                    lineNumbers: true,
-                                    highlightActiveLineGutter: false,
-                                    highlightSpecialChars: true,
-                                    foldGutter: true,
-                                    drawSelection: false,
-                                    syntaxHighlighting: true,
-                                    bracketMatching: true,
-                                }}
-                            />
-                        </div>
+                                {/* Info note */}
+                                <div className = "mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                                    <div className = "flex items-start space-x-2">
+                                        <svg className = "w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                            <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <p className = "text-xs text-blue-800 dark:text-blue-200">
+                                            Editing this DDL updates the in-app schema model only. It does not change the live database by default.
+                                        </p>
+                                    </div>
+                                </div>
 
+                                {/* DDL Editor */}
+                                <div className = "flex-1 min-h-[300px] rounded-lg border border-gray-200 dark:border-slate-600 overflow-hidden">
+                                    {isDdlLoading ? (
+                                        <div className = "flex items-center justify-center h-full bg-gray-50 dark:bg-slate-900">
+                                            <div className = "text-center">
+                                                <svg className = "animate-spin h-8 w-8 text-blue-600 dark:text-blue-400 mx-auto mb-4" xmlns = "http://www.w3.org/2000/svg" fill = "none" viewBox = "0 0 24 24">
+                                                    <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
+                                                    <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                                <p className = "text-sm text-gray-600 dark:text-gray-400">Loading DDL...</p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <CodeMirror
+                                            value = {editedDdlText}
+                                            height = "100%"
+                                            minHeight = "300px"
+                                            extensions = {[sql()]}
+                                            onChange = {(value) => setEditedDdlText(value)}
+                                            theme = {theme === 'dark' ? oneDark : 'light'}
+                                            className = "h-full"
+                                            basicSetup = {{
+                                                lineNumbers: true,
+                                                highlightActiveLineGutter: true,
+                                                highlightSpecialChars: true,
+                                                foldGutter: true,
+                                                drawSelection: true,
+                                                dropCursor: true,
+                                                allowMultipleSelections: true,
+                                                indentOnInput: true,
+                                                syntaxHighlighting: true,
+                                                bracketMatching: true,
+                                                closeBrackets: true,
+                                                autocompletion: true,
+                                                rectangularSelection: true,
+                                                crosshairCursor: true,
+                                                highlightActiveLine: true,
+                                                highlightSelectionMatches: true,
+                                                closeBracketsKeymap: true,
+                                                searchKeymap: true,
+                                                foldKeymap: true,
+                                                completionKeymap: true,
+                                                lintKeymap: true,
+                                            }}
+                                        />
+                                    )}
+                                </div>
+
+                                {/* CTAs */}
+                                <div className = "mt-4 flex items-center justify-between">
+                                    <button
+                                        onClick = {handleApplyDDL}
+                                        disabled = {isDdlApplying || isDdlLoading}
+                                        className = {`
+                                            bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600
+                                            text-white font-medium py-2 px-4 rounded-lg transition-colors
+                                            flex items-center space-x-2
+                                            ${isDdlApplying || isDdlLoading ? 'opacity-50 cursor-not-allowed' : ''}
+                                        `}
+                                    >
+                                        {isDdlApplying && (
+                                            <svg className = "animate-spin h-4 w-4 text-white" xmlns = "http://www.w3.org/2000/svg" fill = "none" viewBox = "0 0 24 24">
+                                                <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
+                                                <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                        )}
+                                        <span>{isDdlApplying ? 'Applying...' : 'Apply to Model'}</span>
+                                    </button>
+
+                                    <div className = "flex items-center space-x-2">
+                                        <button
+                                            onClick = {fetchDDL}
+                                            disabled = {isDdlLoading || isDdlApplying}
+                                            className = {`
+                                                flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors
+                                                ${isDdlLoading || isDdlApplying
+                                                    ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed'
+                                                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-800 dark:hover:text-gray-200'
+                                                }
+                                            `}
+                                            title = "Refresh DDL from current schema"
+                                        >
+                                            {isDdlLoading ? (
+                                                <svg className = "animate-spin h-4 w-4" xmlns = "http://www.w3.org/2000/svg" fill = "none" viewBox = "0 0 24 24">
+                                                    <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
+                                                    <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                            ) : (
+                                                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                            )}
+                                            <span className = "text-sm font-medium">Refresh</span>
+                                        </button>
+
+                                        <button
+                                            onClick = {() => setEditedDdlText(ddlText)}
+                                            disabled = {isDdlLoading || isDdlApplying || editedDdlText === ddlText}
+                                            className = {`
+                                                text-sm px-3 py-2 rounded-lg transition-colors
+                                                ${isDdlLoading || isDdlApplying || editedDdlText === ddlText
+                                                    ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed'
+                                                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-gray-800 dark:hover:text-gray-200'
+                                                }
+                                            `}
+                                            title = "Discard edits and reset to last saved DDL"
+                                        >
+                                            Reset
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
-
                 )}
 
             </div>

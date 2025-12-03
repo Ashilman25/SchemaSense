@@ -1,8 +1,8 @@
-import {useState, useEffect} from "react";
+import {useState, useEffect, useCallback} from "react";
 import { schemaAPI } from "../../utils/api";
 import ERDiagram from "../diagram/ERDiagram";
 
-const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger }) => {
+const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, onSchemaChange, onRegisterUpdateCallback }) => {
     const [activeTab, setActiveTab] = useState('tables')
     const [schema, setSchema] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -11,6 +11,12 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
 
     const [searchTerm, setSearchTerm] = useState('');
     const [notification, setNotification] = useState(null);
+
+    const MAX_HISTORY_SIZE = 10;
+    const [undoStack, setUndoStack] = useState([]);
+    const [redoStack, setRedoStack] = useState([]);
+    const [currentDdl, setCurrentDdl] = useState(null);
+    const [isUndoRedoInProgress, setIsUndoRedoInProgress] = useState(false);
 
     useEffect(() => {
         if (isDbConnected) {
@@ -23,25 +29,36 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
 
     }, [isDbConnected, refreshTrigger]);
 
-    const fetchSchema = async () => {
-        setLoading(true);
-        setError(null);
 
-        try {
-            const data = await schemaAPI.getSchema();
-            setSchema(data);
-
-        } catch (err) {
-            console.error('Failed to fetch schema:', err);
-            setError(err.message || 'Failed to load schema');
-
-        } finally {
-            setLoading(false);
+    useEffect(() => {
+        if (schema && onSchemaChange) {
+            onSchemaChange(schema, currentDdl);
         }
-    };
+    }, [schema, currentDdl, onSchemaChange]); 
 
-    const handleSchemaUpdate = (newSchema, newDDL) => {
+    const handleSchemaUpdate = useCallback((newSchema, newDDL) => {
+        setUndoStack(prevStack => {
+            if (schema && currentDdl) {
+                const snapshot = {
+                    schema: JSON.parse(JSON.stringify(schema)),
+                    ddl: currentDdl
+                };
+
+                const newStack = [...prevStack, snapshot];
+
+                if (newStack.length > MAX_HISTORY_SIZE) {
+                    newStack.shift();
+                }
+
+                return newStack;
+            }
+            return prevStack;
+        });
+
+        setRedoStack([]);
         setSchema(newSchema);
+        setCurrentDdl(newDDL);
+
         setNotification({
             type: 'success',
             message: 'Changes saved to virtual schema (not applied to DB)'
@@ -50,6 +67,148 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
         setTimeout(() => {
             setNotification(null);
         }, 5000);
+    }, [schema, currentDdl]);
+
+    useEffect(() => {
+        if (onRegisterUpdateCallback) {
+            onRegisterUpdateCallback(handleSchemaUpdate);
+        }
+    }, [handleSchemaUpdate, onRegisterUpdateCallback]);
+
+    const handleUndo = useCallback(async () => {
+        if (undoStack.length === 0 || isUndoRedoInProgress) return;
+
+        const previousSnapshot = undoStack[undoStack.length - 1];
+
+        setIsUndoRedoInProgress(true);
+
+        try {
+            await schemaAPI.applyDDLEdit(previousSnapshot.ddl);
+
+            setUndoStack(prevStack => prevStack.slice(0, -1));
+            setRedoStack(prevStack => {
+                const snapshot = {
+                    schema: JSON.parse(JSON.stringify(schema)),
+                    ddl: currentDdl
+                };
+
+                const newStack = [...prevStack, snapshot];
+
+                if (newStack.length > MAX_HISTORY_SIZE) {
+                    newStack.shift();
+                }
+
+                return newStack;
+            });
+
+            const restoredSchema = JSON.parse(JSON.stringify(previousSnapshot.schema));
+            setSchema(restoredSchema);
+            setCurrentDdl(previousSnapshot.ddl);
+
+            setNotification({
+                type: 'success',
+                message: 'Undo successful'
+            });
+
+            setTimeout(() => {
+                setNotification(null);
+            }, 3000);
+
+        } catch (err) {
+            console.error('Undo failed:', err);
+            setNotification({
+                type: 'error',
+                message: `Undo failed: ${err.message || 'Unknown error'}`
+            });
+
+            setTimeout(() => {
+                setNotification(null);
+            }, 5000);
+
+        } finally {
+            setIsUndoRedoInProgress(false);
+        }
+
+    }, [undoStack, schema, currentDdl, isUndoRedoInProgress]);
+
+    const handleRedo = useCallback(async () => {
+        if (redoStack.length === 0 || isUndoRedoInProgress) return;
+
+        const nextSnapshot = redoStack[redoStack.length - 1];
+
+        setIsUndoRedoInProgress(true);
+
+        try {
+            await schemaAPI.applyDDLEdit(nextSnapshot.ddl);
+
+            setRedoStack(prevStack => prevStack.slice(0, -1));
+            setUndoStack(prevStack => {
+                const snapshot = {
+                    schema: JSON.parse(JSON.stringify(schema)),
+                    ddl: currentDdl
+                };
+
+                const newStack = [...prevStack, snapshot];
+
+                if (newStack.length > MAX_HISTORY_SIZE) {
+                    newStack.shift();
+                }
+
+                return newStack;
+            });
+
+            const restoredSchema = JSON.parse(JSON.stringify(nextSnapshot.schema));
+            setSchema(restoredSchema);
+            setCurrentDdl(nextSnapshot.ddl);
+
+            setNotification({
+                type: 'success',
+                message: 'Redo successful'
+            });
+
+            setTimeout(() => {
+                setNotification(null);
+            }, 3000);
+
+        } catch (err) {
+            console.error('Redo failed:', err);
+            setNotification({
+                type: 'error',
+                message: `Redo failed: ${err.message || 'Unknown error'}`
+            });
+
+            setTimeout(() => {
+                setNotification(null);
+            }, 5000);
+
+        } finally {
+            setIsUndoRedoInProgress(false);
+        }
+
+    }, [redoStack, schema, currentDdl, isUndoRedoInProgress]);
+
+    const fetchSchema = async () => {
+        setLoading(true);
+        setError(null);
+
+        try {
+            const [schemaData, ddlData] = await Promise.all([
+                schemaAPI.getSchema(),
+                schemaAPI.getDDL()
+            ]);
+
+            setSchema(schemaData);
+            setCurrentDdl(ddlData.ddl);
+            setUndoStack([]);
+            setRedoStack([]);
+
+        } catch (err) {
+            console.error('Failed to fetch schema:', err);
+            setError(err.message || 'Failed to load schema');
+
+        } finally {
+            setLoading(false);
+        }
     };
 
     const toggleTable = (tableKey) => {
@@ -311,7 +470,6 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
             {/* tabs */}
             <div className = "border-b border-gray-200 dark:border-slate-700">
                 <div className = "flex space-x-1 px-4">
-
                     <button
                         onClick = {() => setActiveTab('tables')}
                         className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
@@ -423,6 +581,58 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
                             <>
                                 {/* diagram filters */}
                                 <div className = "space-y-2 mb-3">
+
+                                    {/* undo and redo buttons */}
+                                    <div className = "flex items-center space-x-2">
+                                        <button
+                                            onClick = {handleUndo}
+                                            disabled = {undoStack.length === 0 || isUndoRedoInProgress}
+                                            className = "flex items-center space-x-1 px-3 py-1.5 text-xs bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-100 dark:disabled:hover:bg-slate-700"
+                                            title = "Undo (Ctrl+Z)"
+                                        >
+                                            {isUndoRedoInProgress ? (
+                                                <svg className = "animate-spin w-4 h-4" fill = "none" viewBox = "0 0 24 24">
+                                                    <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
+                                                    <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                            ) : (
+                                                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                </svg>
+                                            )}
+
+                                            <span>Undo</span>
+
+                                            {undoStack.length > 0 && !isUndoRedoInProgress && (
+                                                <span className = "text-xs text-gray-500 dark:text-gray-400">({undoStack.length})</span>
+                                            )}
+                                        </button>
+
+                                        <button
+                                            onClick = {handleRedo}
+                                            disabled = {redoStack.length === 0 || isUndoRedoInProgress}
+                                            className = "flex items-center space-x-1 px-3 py-1.5 text-xs bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-100 dark:disabled:hover:bg-slate-700"
+                                            title = "Redo (Ctrl+Y)"
+                                        >
+                                            {isUndoRedoInProgress ? (
+                                                <svg className = "animate-spin w-4 h-4" fill = "none" viewBox = "0 0 24 24">
+                                                    <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
+                                                    <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                            ) : (
+                                                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+                                                </svg>
+                                            )}
+
+                                            <span>Redo</span>
+
+                                            {redoStack.length > 0 && !isUndoRedoInProgress && (
+                                                <span className = "text-xs text-gray-500 dark:text-gray-400">({redoStack.length})</span>
+                                            )}
+                                        </button>
+                                    </div>
+
                                     {/* Search box */}
                                     <div className = "relative">
                                         <svg className = "absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
@@ -474,7 +684,6 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger })
                         )}
                     </div>
                 )}
-
 
             </div>
         </div>
