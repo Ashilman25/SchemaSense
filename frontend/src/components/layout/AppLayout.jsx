@@ -14,6 +14,7 @@ const AppLayout = () => {
   const [shouldRefreshSchema, setShouldRefreshSchema] = useState(0);
 
   const [currentSchema, setCurrentSchema] = useState(null);
+  const [currentDdl, setCurrentDdl] = useState(null);
   const [schemaUpdateCallback, setSchemaUpdateCallback] = useState(null);
 
   const handleSqlGenerated = (sql, warnings = []) => {
@@ -36,8 +37,9 @@ const AppLayout = () => {
     }
   };
 
-  const handleSchemaChange = useCallback((newSchema) => {
+  const handleSchemaChange = useCallback((newSchema, newDdl) => {
     setCurrentSchema(newSchema);
+    setCurrentDdl(newDdl);
   }, []);
 
   const handleSchemaUpdateCallbackRegister = useCallback((callback) => {
@@ -69,6 +71,7 @@ const AppLayout = () => {
               warnings = {sqlWarnings}
               isDbConnected = {isDbConnected}
               currentSchema = {currentSchema}
+              currentDdl = {currentDdl}
               onSchemaUpdate = {schemaUpdateCallback}
             />
           </div>
