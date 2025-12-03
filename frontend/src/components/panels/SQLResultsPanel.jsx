@@ -184,6 +184,19 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
     };
 
 
+    //when sql tab is open, get the ddl
+    useEffect(() => {
+        if (activeTab === 'schema' && isDbConnected && !ddlText.startsWith('CREATE')) {
+            fetchDDL();
+        }
+    }, [activeTab, isDbConnected]);
+
+    //auto refresh when diagram changes
+    useEffect(() => {
+        if (activeTab === 'schema' && isDbConnected && currentSchema && ddlText.startsWith('CREATE')) {
+            fetchDDL();
+        }
+    }, [currentSchema]);
 
 
 
@@ -598,7 +611,7 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
                                     )}
                                 </div>
 
-                                {/* Action buttons */}
+                                {/* CTAs */}
                                 <div className = "mt-4 flex items-center justify-between">
                                     <button
                                         onClick = {handleApplyDDL}
