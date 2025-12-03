@@ -1,19 +1,30 @@
-# should create its own router with relevant prefix/tag 
-# and include placeholder endpoint functions (returning TODO responses)
-# that outline expected inputs/outputs per the plan.
+from typing import List, Optional
+from datetime import datetime
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+from psycopg2.extras import RealDictCursor
 
-
-from typing import List
-from fastapi import APIRouter
-from pydantic import BaseModel
+from app.db import get_connection
 
 router = APIRouter(prefix="/api/history", tags=["history"])
 
 
-class HistoryItem(BaseModel):
+class HistoryItemCreate(BaseModel):
+    question: str = Field(..., description = "The english question asked")
+    sql: Optional[str] = Field(None, description = "The generated SQL query")
+    status: str = Field(..., description = "Query status: success, error, or pending")
+    execution_duration_ms: Optional[int] = Field(None, description = "Query execution time in milliseconds")
+    
+    
+class HistoryItemResponse(BaseModel):
+    id: int
+    timestamp: datetime
     question: str
-    sql: str | None = None
-    status: str = "pending"
+    sql: Optional[str]
+    status: str
+    execution_duration_ms: Optional[int]
+
+
 
 
 _history: List[HistoryItem] = []
