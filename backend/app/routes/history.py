@@ -131,3 +131,41 @@ def list_history(limit: int = 50):
     
     except Exception as e:
         raise HTTPException(status_code = 500, detail = f"Failed to retrieve history: {str(e)}")
+
+
+@router.delete("/{history_id}", response_model = dict)
+def delete_history(history_id: int):
+    try:
+        _init_history_table()
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+                       DELETE FROM schemasense.query_history
+                       WHERE id = %s
+                       RETURNING id
+                       """, (history_id,))
+
+        deleted_row = cursor.fetchone()
+
+        if not deleted_row:
+            cursor.close()
+            conn.close()
+            raise HTTPException(status_code = 404, detail = f"History item with id {history_id} not found")
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return {
+            "success" : True,
+            "id" : deleted_row[0],
+            "message" : "History item deleted successfully"
+        }
+
+    except HTTPException:
+        raise
+    
+    except Exception as e:
+        raise HTTPException(status_code = 500, detail = f"Failed to delete history: {str(e)}")
