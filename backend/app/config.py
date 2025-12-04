@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     db_url: str = "postgresql://user:password@localhost:5432/schemasense"
     openai_api_key: str | None = None
     environment: str = "development"
-    allowed_origins: list[str] = ["http://localhost:5173"]
+    allowed_origins: list[str] = ["http://localhost:5173", "http://localhost:5174"]
 
     model_config = SettingsConfigDict(
         env_file = ".env",
