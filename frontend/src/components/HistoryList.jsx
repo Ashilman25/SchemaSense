@@ -133,18 +133,43 @@ const HistoryList = forwardRef(({onHistoryItemClick, isDbConnected}, ref) => {
   }
 
 
+  return (
+    <div className = "flex-1 overflow-y-auto space-y-2">
+      {history.map((item) => (
+        <div
+          key = {item.id}
+          onClick = {() => handleItemClick(item)}
+          className = "p-3 bg-gray-50 dark:bg-slate-700/50 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg border border-gray-200 dark:border-slate-600 cursor-pointer transition-colors group"
+        >
+          <div className = "flex items-start gap-2">
+            <StatusIcon status = {item.status} />
 
+            <div className = "flex-1 min-w-0">
+              <p className = "text-sm text-gray-700 dark:text-gray-300 line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                {item.question}
+              </p>
 
+              <div className = "flex items-center gap-2 mt-1">
+                <p className = "text-xs text-gray-500 dark:text-gray-400">
+                  {formatRelativeTime(item.timestamp)}
+                </p>
 
-
-
-
-
-
-
-
-
-
+                {item.execution_duration_ms && (
+                  <>
+                    <span className = "text-xs text-gray-400">•</span>
+                    <p className = "text-xs text-gray-500 dark:text-gray-400">
+                      {item.execution_duration_ms}ms
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          
+        </div>
+      ))}
+    </div>
+  );
 });
 
 export default HistoryList;
