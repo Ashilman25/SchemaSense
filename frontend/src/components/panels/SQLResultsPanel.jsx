@@ -6,6 +6,7 @@ import {useTheme} from '../../context/ThemeContext';
 import {format} from 'sql-formatter';
 import { sqlAPI, schemaAPI } from '../../utils/api';
 import QueryPlanVisualization from '../QueryPlanVisualization';
+import { exportAsJSON, exportAsCSV } from '../../utils/downloads';
 
 
 const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema, currentDdl, onSchemaUpdate }) => {
@@ -226,17 +227,28 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
     }, [isDownloadMenuOpen]);
 
     const handleDownloadJSON = () => {
-        console.log('Download JSON');
+        if (!queryResults || !queryResults.columns || !queryResults.rows) {
+            return;
+        }
+
+        const baseName = querySql.split('\n')[0].replace(/^--/, '').trim().substring(0, 50) || 'query_results';
+
+        exportAsJSON(queryResults.columns, queryResults.rows, baseName);
         setIsDownloadMenuOpen(false);
     };
 
     const handleDownloadCSV = () => {
-        console.log('Download CSV');
+        if (!queryResults || !queryResults.columns || !queryResults.rows) {
+            return;
+        }
+
+        const baseName = querySql.split('\n')[0].replace(/^--/, '').trim().substring(0, 50) || 'query_results';
+
+        exportAsCSV(queryResults.columns, queryResults.rows, baseName);
         setIsDownloadMenuOpen(false);
     };
 
     const handleDownloadPDF = () => {
-        console.log('Download PDF');
         setIsDownloadMenuOpen(false);
     };
 
