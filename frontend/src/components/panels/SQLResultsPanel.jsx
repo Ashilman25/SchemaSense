@@ -1,4 +1,4 @@
-import {useState, useEffect} from 'react';
+import {useState, useEffect, useRef} from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import {sql} from '@codemirror/lang-sql';
 import {oneDark} from '@codemirror/theme-one-dark';
@@ -18,11 +18,13 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
+    const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
+    const downloadMenuRef = useRef(null);
+
     const [queryPlan, setQueryPlan] = useState(null);
     const [planError, setPlanError] = useState('');
     const [isPlanLoading, setIsPlanLoading] = useState(false);
 
-    // Schema SQL tab state
     const [ddlText, setDdlText] = useState('-- Schema DDL will appear here');
     const [editedDdlText, setEditedDdlText] = useState('');
     const [isDdlLoading, setIsDdlLoading] = useState(false);
@@ -280,8 +282,8 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
                         {/* run query button */}
                         <div className = "mt-4 flex items-center space-x-2">
                             <button
-                                onClick={handleExecuteQuery}
-                                disabled={isLoading}
+                                onClick = {handleExecuteQuery}
+                                disabled = {isLoading}
                                 className = {`
                                     bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600
                                     text-white font-medium py-2 px-4 rounded-lg transition-colors
@@ -314,10 +316,10 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
 
                             {/* Error Message */}
                             {error && (
-                                <div className="m-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                                    <div className="flex items-start">
-                                        <svg className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                <div className = "m-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                                    <div className = "flex items-start">
+                                        <svg className = "h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 mr-3" fill = "currentColor" viewBox = "0 0 20 20">
+                                            <path fillRule = "evenodd" d = "M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                                         </svg>
                                         <div>
                                             <h3 className="text-sm font-medium text-red-800 dark:text-red-300">Query Error</h3>
@@ -343,16 +345,118 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
                             {/* Results Table */}
                             {queryResults && !isLoading && !error && (
                                 <div className="flex-1 flex flex-col overflow-hidden">
+
                                     {/* Results Header */}
-                                    <div className="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800">
-                                        <div className="flex items-center space-x-4">
-                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                Row count: <span className="text-blue-600 dark:text-blue-400">{queryResults.row_count}</span>
+                                    <div className = "px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between bg-white dark:bg-slate-800">
+
+                                        <div className = "flex items-center space-x-4">
+                                            <span className = "text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                Row count: <span className = "text-blue-600 dark:text-blue-400">{queryResults.row_count}</span>
                                             </span>
+
                                             {queryResults.truncated && (
-                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
+                                                <span className = "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
                                                     Results truncated to {queryResults.row_count} rows
                                                 </span>
+                                            )}
+                                        </div>
+
+                                        {/* download button + menu */}
+                                        <div className = "relative" ref = {downloadMenuRef}>
+
+                                            <button
+                                                onClick = {() => setIsDownloadMenuOpen(!isDownloadMenuOpen)}
+                                                disabled = {!queryResults.rows || queryResults.rows.length === 0}
+                                                className = {`
+                                                    flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                                                    ${queryResults.rows && queryResults.rows.length > 0
+                                                        ? 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white'
+                                                        : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                                                    }
+                                                `}
+                                                aria-expanded = {isDownloadMenuOpen}
+                                                aria-haspopup = "true"
+                                            >
+                                                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                </svg>
+
+                                                <span>Download</span>
+
+                                                <svg className = {`w-4 h-4 transition-transform ${isDownloadMenuOpen ? 'rotate-180' : ''}`} fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </button>
+
+                                            {/* the menu itself */}
+                                            {isDownloadMenuOpen && queryResults.rows && queryResults.rows.length > 0 && (
+                                                <div
+                                                    className = "absolute right-0 mt-2 w-48 rounded-lg shadow-lg bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 py-1 z-10"
+                                                    role = "menu"
+                                                    aria-orientation = "vertical"
+                                                >
+                                                    <button
+                                                        onClick = {handleDownloadJSON}
+                                                        onKeyDown = {(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                handleDownloadJSON();
+                                                            }
+                                                        }}
+                                                        className = "w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 focus:bg-gray-100 dark:focus:bg-slate-700 focus:outline-none flex items-center space-x-2 transition-colors"
+                                                        role = "menuitem"
+                                                        tabIndex = {0}
+                                                    >
+
+                                                        <svg className = "w-4 h-4" viewBox = "0 0 24 24" fill = "none" stroke = "currentColor" xmlns = "http://www.w3.org/2000/svg">
+                                                            <g fill = "none" stroke = "currentColor" strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = "2">
+                                                                <path d = "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                                                                <path d = "M14 2v6h6m-10 4a1 1 0 0 0-1 1v1a1 1 0 0 1-1 1a1 1 0 0 1 1 1v1a1 1 0 0 0 1 1m4 0a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1a1 1 0 0 1-1-1v-1a1 1 0 0 0-1-1" />
+                                                            </g>                                                        
+                                                        </svg>
+
+
+                                                        <span>Download as JSON</span>
+                                                    </button>
+
+                                                    <button
+                                                        onClick = {handleDownloadCSV}
+                                                        onKeyDown = {(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                handleDownloadCSV();
+                                                            }
+                                                        }}
+                                                        className = "w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 focus:bg-gray-100 dark:focus:bg-slate-700 focus:outline-none flex items-center space-x-2 transition-colors"
+                                                        role = "menuitem"
+                                                        tabIndex = {0}
+                                                    >
+                                                        <svg className = "w-4 h-4" viewBox = "0 0 16 16" xmlns = "http://www.w3.org/2000/svg">
+                                                            <path fill = "currentColor" fillRule = "evenodd" clipRule = "evenodd" d = "M1.5 1.5A.5.5 0 0 1 2 1h6.5a.5.5 0 0 1 .354.146l2.5 2.5A.5.5 0 0 1 11.5 4v2h-1V5H8a.5.5 0 0 1-.5-.5V2h-5v12h8v-.5h1v1a.5.5 0 0 1-.5.5H2a.5.5 0 0 1-.5-.5zm7 .707V4h1.793zm2.55 5.216A3 3 0 0 1 11 7h1q-.001.004.007.069q.01.07.029.182c.026.15.063.34.11.56c.092.44.216.982.34 1.512s.25 1.043.343 1.425l.062.252h.218l.062-.252c.093-.382.218-.896.342-1.425c.125-.53.249-1.072.341-1.512c.047-.22.085-.41.11-.56q.02-.111.029-.182L14 7h1c0 .113-.024.272-.05.423c-.03.165-.07.369-.117.594a70 70 0 0 1-.346 1.535a167 167 0 0 1-.459 1.895l-.043.174A.5.5 0 0 1 13.5 12h-1a.5.5 0 0 1-.485-.379l-.043-.174a192 192 0 0 1-.459-1.895a70 70 0 0 1-.346-1.535a18 18 0 0 1-.117-.594M4 8a1 1 0 0 1 1-1h2v1H5v3h2v1H5a1 1 0 0 1-1-1zm3.5 0a1 1 0 0 1 1-1h2v1h-2v1h1a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1h-2v-1h2v-1h-1a1 1 0 0 1-1-1z" />
+                                                        </svg>
+
+                                                        <span>Download as CSV</span>
+                                                    </button>
+
+                                                    <button
+                                                        onClick = {handleDownloadPDF}
+                                                        onKeyDown = {(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                handleDownloadPDF();
+                                                            }
+                                                        }}
+                                                        className = "w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 focus:bg-gray-100 dark:focus:bg-slate-700 focus:outline-none flex items-center space-x-2 transition-colors"
+                                                        role = "menuitem"
+                                                        tabIndex = {0}
+                                                    >
+                                                        <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                                            <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                        </svg>
+
+                                                        <span>Download as PDF</span>
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
