@@ -165,6 +165,14 @@ export const historyAPI = {
     });
   },
 
+
+  // Returns: {success: boolean, id: number, message: string}
+  deleteHistory: async (historyId) => {
+    return apiRequest(`/api/history/${historyId}`, {
+      method: 'DELETE',
+    });
+  },
+
 };
 
 export default {
