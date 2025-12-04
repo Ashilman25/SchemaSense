@@ -1,28 +1,12 @@
-import { useState } from "react";
-import { nlToSqlAPI } from "../../utils/api";
+import { useState, useRef } from "react";
+import { nlToSqlAPI, historyAPI } from "../../utils/api";
+import HistoryList from "../HistoryList";
 
 const QueryBuilderPanel = ({ onSqlGenerated, question, onQuestionChange, isDbConnected }) => {
-    const placeholderHistory = [
-        {
-            id: 1,
-            question: "Show me total revenue by month for the last 6 months",
-            timestamp: "2 hours ago"
-        },
-        {
-            id: 2,
-            question: "List the top 10 customers by lifetime spend",
-            timestamp: "5 hours ago"
-        },
-        {
-            id: 3,
-            question: "What are the most popular products?",
-            timestamp: "Yesterday"
-        }
-    ];
-
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [warnings, setWarnings] = useState([]);
+    const historyListRef = useRef(null);
 
     const handleGenerate = async () => {
         if (!question.trim()) {
@@ -45,9 +29,44 @@ const QueryBuilderPanel = ({ onSqlGenerated, question, onQuestionChange, isDbCon
             if (response.sql) {
                 onSqlGenerated(response.sql, response.warnings || []);
                 setWarnings(response.warnings || []);
+
+                try {
+                    await historyAPI.saveHistory({
+                        question: question,
+                        sql: response.sql,
+                        status: 'success',
+                        execution_duration_ms: null
+                    });
+
+                    if (historyListRef.current?.refresh) {
+                        historyListRef.current.refresh();
+                    }
+
+                } catch (historyErr) {
+                    console.error('Failed to save to history:', historyErr);
+                }
             }
+
         } catch (err) {
             setError(err.message || 'Failed to generate SQL');
+
+            // Save failed attempt to history
+            try {
+                await historyAPI.saveHistory({
+                    question: question,
+                    sql: null,
+                    status: 'error',
+                    execution_duration_ms: null
+                });
+
+                if (historyListRef.current?.refresh) {
+                    historyListRef.current.refresh();
+                }
+
+            } catch (historyErr) {
+                console.error('Failed to save error to history:', historyErr);
+            }
+
         } finally {
             setIsLoading(false);
         }
@@ -121,18 +140,16 @@ const QueryBuilderPanel = ({ onSqlGenerated, question, onQuestionChange, isDbCon
                 <div className = "flex-1 flex flex-col min-h-0">
                     <h3 className = "text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Recent Queries</h3>
 
-                    <div className = "flex-1 overflow-y-auto space-y-2">
-                        {placeholderHistory.map((item) => (
-                            <div key={item.id} className = "p-3 bg-gray-50 dark:bg-slate-700/50 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg border border-gray-200 dark:border-slate-600 cursor-pointer transition-colors">
-                                <p className = "text-sm text-gray-700 dark:text-gray-300 line-clamp-2">
-                                    {item.question}
-                                </p>
-                                <p className = "text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                    {item.timestamp}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
+                    <HistoryList
+                        ref = {historyListRef}
+                        isDbConnected = {isDbConnected}
+                        onHistoryItemClick = {(item) => {
+                            onQuestionChange(item.question);
+                            if (item.sql) {
+                                onSqlGenerated(item.sql, []);
+                            }
+                        }}
+                    />
                 </div>
 
             </div>
