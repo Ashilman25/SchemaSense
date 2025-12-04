@@ -200,6 +200,32 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
     }, [activeTab, isDbConnected, currentDdl]);
 
 
+    //outside clicks to close download menu
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (downloadMenuRef.current && !downloadMenuRef.current.contains(event.target)) {
+                setIsDownloadMenuOpen(false);
+            }
+        };
+
+        const handleEscape = (event) => {
+            if (event.key === 'Escaoe') {
+                setIsDownloadMenuOpen(false);
+            }
+        };
+
+        if (isDownloadMenuOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('keydown', handleEscape);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [isDownloadMenuOpen]);
+
+
 
     return (
         <div className = "h-full bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col transition-colors">
