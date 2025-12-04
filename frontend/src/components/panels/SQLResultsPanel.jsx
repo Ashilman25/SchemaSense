@@ -209,7 +209,7 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
         };
 
         const handleEscape = (event) => {
-            if (event.key === 'Escaoe') {
+            if (event.key === 'Escape') {
                 setIsDownloadMenuOpen(false);
             }
         };
@@ -224,6 +224,21 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
             document.removeEventListener('keydown', handleEscape);
         };
     }, [isDownloadMenuOpen]);
+
+    const handleDownloadJSON = () => {
+        console.log('Download JSON');
+        setIsDownloadMenuOpen(false);
+    };
+
+    const handleDownloadCSV = () => {
+        console.log('Download CSV');
+        setIsDownloadMenuOpen(false);
+    };
+
+    const handleDownloadPDF = () => {
+        console.log('Download PDF');
+        setIsDownloadMenuOpen(false);
+    };
 
 
 
