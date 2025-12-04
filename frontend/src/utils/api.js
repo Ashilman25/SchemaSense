@@ -137,9 +137,40 @@ export const sqlAPI = {
   },
 };
 
+
+export const historyAPI = {
+
+  // Returns: array of {id, timestamp, question, sql, status, execution_duration_ms}
+  getHistory: async (limit = 50) => {
+    const params = new URLSearchParams({
+      limit: String(limit),
+    });
+
+    return apiRequest(`/api/history?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+
+  // Returns: {saved: boolean, id: number}
+  saveHistory: async (historyItem) => {
+    return apiRequest('/api/history', {
+      method: 'POST',
+      body: JSON.stringify({
+        question: historyItem.question,
+        sql: historyItem.sql || null,
+        status: historyItem.status,
+        execution_duration_ms: historyItem.execution_duration_ms || null,
+      }),
+    });
+  },
+
+};
+
 export default {
   dbConfigAPI,
   schemaAPI,
   nlToSqlAPI,
   sqlAPI,
+  historyAPI,
 };

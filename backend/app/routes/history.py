@@ -118,16 +118,15 @@ def list_history(limit: int = 50):
         #convert to the history item response format
         history = []
         for each in rows:
-            id = each["id"]
-            timestamp = each["timestamp"]
-            question = each["question"]
-            sql = each["sql"]
-            status = each["status"]
-            execution_duration_ms = each["execution_duration_ms"]
-            
-            history.append(HistoryItemResponse(id, timestamp, question, sql, status, execution_duration_ms))
-            
-            
+            history.append(HistoryItemResponse(
+                id = each["id"],
+                timestamp = each["timestamp"],
+                question = each["question"],
+                sql = each["sql"],
+                status = each["status"],
+                execution_duration_ms = each["execution_duration_ms"]
+            ))
+
         return history
     
     except Exception as e:
