@@ -66,7 +66,8 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, o
 
         setTimeout(() => {
             setNotification(null);
-        }, 5000);
+        }, 3500);
+
     }, [schema, currentDdl]);
 
     useEffect(() => {
@@ -271,9 +272,11 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, o
                     <svg className = "w-12 h-12 text-gray-400 dark:text-gray-500 mb-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
                         <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
                     </svg>
+
                     <p className = "text-sm text-gray-600 dark:text-gray-400 mb-2">
                         No database connected
                     </p>
+
                     <p className = "text-xs text-gray-500 dark:text-gray-500">
                         Click the settings icon in the top right to connect to a database
                     </p>
@@ -468,7 +471,7 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, o
             )}
 
             {/* tabs */}
-            <div className = "border-b border-gray-200 dark:border-slate-700">
+            <div className = {`border-b border-gray-200 dark:border-slate-700 transition-all ${notification ? 'pt-14' : ''}`}>
                 <div className = "flex space-x-1 px-4">
                     <button
                         onClick = {() => setActiveTab('tables')}
