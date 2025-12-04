@@ -6,7 +6,7 @@ import {useTheme} from '../../context/ThemeContext';
 import {format} from 'sql-formatter';
 import { sqlAPI, schemaAPI } from '../../utils/api';
 import QueryPlanVisualization from '../QueryPlanVisualization';
-import { exportAsJSON, exportAsCSV } from '../../utils/downloads';
+import { exportAsJson, exportAsCSV, exportAsPDF } from '../../utils/downloads';
 
 
 const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema, currentDdl, onSchemaUpdate }) => {
@@ -233,7 +233,7 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
 
         const baseName = querySql.split('\n')[0].replace(/^--/, '').trim().substring(0, 50) || 'query_results';
 
-        exportAsJSON(queryResults.columns, queryResults.rows, baseName);
+        exportAsJson(queryResults.columns, queryResults.rows, baseName);
         setIsDownloadMenuOpen(false);
     };
 
@@ -248,8 +248,24 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
         setIsDownloadMenuOpen(false);
     };
 
-    const handleDownloadPDF = () => {
-        setIsDownloadMenuOpen(false);
+    const handleDownloadPDF = async () => {
+        if (!queryResults || !queryResults.columns || !queryResults.rows) {
+            return;
+        }
+
+        try {
+            const baseName = querySql.split('\n')[0].replace(/^--/, '').trim().substring(0, 50) || 'query_results';
+            const queryTitle = querySql.split('\n')[0].replace(/^--/, '').trim().substring(0, 100) || 'Query Results Report';
+
+            await exportAsPDF(queryResults.columns, queryResults.rows, baseName, queryTitle);
+            setIsDownloadMenuOpen(false);
+
+        } catch (error) {
+            console.error('Failed to export PDF:', error);
+            setError(`Failed to generate PDF: ${error.message}`);
+            setIsDownloadMenuOpen(false);
+            
+        }
     };
 
 
