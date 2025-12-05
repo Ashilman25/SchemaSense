@@ -681,6 +681,7 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, o
                                         schema = {getFilteredSchema()}
                                         onAskAboutTable = {onAskAboutTable}
                                         onSchemaUpdate = {handleSchemaUpdate}
+                                        isDbConnected = {isDbConnected}
                                     />
                                 </div>
                             </>
