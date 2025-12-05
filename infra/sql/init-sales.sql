@@ -1,7 +1,7 @@
 CREATE SCHEMA IF NOT EXISTS sales;
 
 
-CREATE TABLE sales.customers (
+CREATE TABLE IF NOT EXISTS sales.customers (
     id SERIAL PRIMARY KEY,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE sales.customers (
 );
 
 
-CREATE TABLE sales.products (
+CREATE TABLE IF NOT EXISTS sales.products (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     price DECIMAL(10, 2) NOT NULL,
@@ -17,7 +17,7 @@ CREATE TABLE sales.products (
 );
 
 
-CREATE TABLE sales.orders (
+CREATE TABLE IF NOT EXISTS sales.orders (
     id SERIAL PRIMARY KEY,
     customer_id INTEGER NOT NULL REFERENCES sales.customers(id),
     order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -25,19 +25,20 @@ CREATE TABLE sales.orders (
 );
 
 
-CREATE TABLE sales.order_items (
+CREATE TABLE IF NOT EXISTS sales.order_items (
     id SERIAL PRIMARY KEY,
     order_id INTEGER NOT NULL REFERENCES sales.orders(id),
     product_id INTEGER NOT NULL REFERENCES sales.products(id),
     quantity INTEGER NOT NULL,
-    unit_price DECIMAL(10, 2) NOT NULL 
+    unit_price DECIMAL(10, 2) NOT NULL
 );
 
 
 INSERT INTO sales.customers (first_name, last_name, email) VALUES
     ('John', 'Doe', 'john@example.com'),
     ('Jane', 'Smith', 'jane@example.com'),
-    ('Bob', 'Johnson', 'bob@example.com');
+    ('Bob', 'Johnson', 'bob@example.com')
+ON CONFLICT (email) DO NOTHING;
 
 INSERT INTO sales.products (name, price, category) VALUES
     ('Laptop', 999.99, 'Electronics'),
