@@ -4,7 +4,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.utils.provisioning import generate_db_name, generate_role_name, generate_strong_password
+from app.utils.provisioning import generate_strong_password
 from app.utils.logging_utils import get_secure_logger
 
 logger = get_secure_logger(__name__)
@@ -33,9 +33,12 @@ def provision_database(mode: str, session_id: Optional[str] = None, load_sample:
 #db in shared postgres cluster
 def _provision_managed_database(session_id: Optional[str], load_sample: bool) -> DatabaseConfig:
     settings = get_settings()
-    
-    db_name = generate_db_name()
-    role_name = generate_role_name()
+
+    # Generate a single shortid and use it for both database and role names
+    import secrets
+    shortid = secrets.token_hex(3)  # 6 character hex string
+    db_name = f"schemasense_user_{shortid}"
+    role_name = f"schemasense_u_{shortid}"
     password = generate_strong_password()
     
     admin_dsn = settings.managed_pg_admin_dsn
