@@ -1,13 +1,13 @@
 import psycopg2
-import logging
 from typing import Optional
 from pathlib import Path
 from pydantic import BaseModel
 
 from app.config import get_settings
 from app.utils.provisioning import generate_db_name, generate_role_name, generate_strong_password
+from app.utils.logging_utils import get_secure_logger
 
-logger = logging.getLogger(__name__)
+logger = get_secure_logger(__name__)
 
 class DatabaseConfig(BaseModel):
     host: str
@@ -40,7 +40,7 @@ def _provision_managed_database(session_id: Optional[str], load_sample: bool) ->
     
     admin_dsn = settings.managed_pg_admin_dsn
     
-    logger.info(f"Starting provisioning for session_id = {session_id}, db = {db_name}")
+    logger.info(f"Starting provisioning for session", session_id = session_id, db_name = db_name)
     
     admin_conn = None
     role_created = False
@@ -64,26 +64,26 @@ def _provision_managed_database(session_id: Optional[str], load_sample: bool) ->
                         """, (password,))
             
             role_created = True
-            logger.info(f"Created role: {role_name}")
-            
+            logger.info("Created role", role_name = role_name)
+
             #role level timeouts
             cur.execute(f"ALTER ROLE {role_name} SET statement_timeout = {settings.provision_default_statement_timeout_ms}")
             cur.execute(f"ALTER ROLE {role_name} SET idle_in_transaction_session_timeout = {settings.provision_idle_in_transaction_timeout_ms}")
-            
+
             #new db owned by this new role
             cur.execute(f"CREATE DATABASE {db_name} OWNER {role_name}")
             db_created = True
-            logger.info(f"Created database: {db_name}")
-            
+            logger.info("Created database", db_name = db_name, owner = role_name)
+
             #metadata
             cur.execute("""
                         INSERT INTO provisioned_dbs
                         (session_id, db_name, db_role, mode, status)
                         VALUES (%s, %s, %s, %s, %s)
                         """, (session_id or "anonymous", db_name, role_name, "managed", "active"))
-            
+
             metadata_recorded = True
-            logger.info(f"Recorded metadata for {db_name}")
+            logger.info("Recorded metadata", db_name = db_name)
             
         #parse host and port
         import re
@@ -109,14 +109,14 @@ def _provision_managed_database(session_id: Optional[str], load_sample: bool) ->
         if load_sample and settings.enable_sample_data:
             try:
                 _load_sample_data(db_config)
-                logger.info(f"Sample data loaded successfully for {db_name}")
-                
+                logger.info("Sample data loaded successfully", db_name = db_name)
+
             except Exception as e:
-                logger.error(f"Failed to load sample data for {db_name}: {str(e)}")
-                
+                logger.error("Failed to load sample data", db_name = db_name, error = str(e))
+
                 with admin_conn.cursor() as cur:
                     cur.execute("UPDATE provisioned_dbs SET status = %s WHERE db_name = %s", ("error", db_name))
-                    
+
                 raise Exception(f"Database created but sample data loading failed: {str(e)}")
             
         return db_config
@@ -124,25 +124,25 @@ def _provision_managed_database(session_id: Optional[str], load_sample: bool) ->
 
     
     except Exception as e:
-        logger.error(f"Provisioning failed for {db_name}: {str(e)}", exc_info=True)
-        
+        logger.error("Provisioning failed", db_name = db_name, error = str(e), exc_info = True)
+
         #clean
         if admin_conn:
             try:
                 with admin_conn.cursor() as cur:
                     if db_created:
-                        logger.info(f"Attempting to drop database: {db_name}")
+                        logger.info("Attempting to drop database during cleanup", db_name = db_name)
                         cur.execute(f"DROP DATABASE IF EXISTS {db_name}")
-                        
+
                     if role_created:
-                        logger.info(f"Attempting to drop role: {role_name}")
+                        logger.info("Attempting to drop role during cleanup", role_name = role_name)
                         cur.execute(f"DROP ROLE IF EXISTS {role_name}")
-                        
+
                 logger.info("Cleanup completed")
-            
+
             except Exception as cleanup_error:
-                logger.error(f"Cleanup failed: {str(cleanup_error)}")
-                
+                logger.error("Cleanup failed", error = str(cleanup_error))
+
         raise Exception(f"Failed to provision managed database: {str(e)}")
     
     finally:
@@ -152,32 +152,36 @@ def _provision_managed_database(session_id: Optional[str], load_sample: bool) ->
         
 
 def _load_sample_data(db_config: DatabaseConfig) -> None:
-    dsn = f"postgresql://{db_config.user}:{db_config.password}@{db_config.host}:{db_config.port}/{db_config.dbname}"
-    sql_path = Path(__file__).parent.parent.parent / "infra" / "sql" / "init-sales.sql"
+    from urllib.parse import quote_plus
     
+    encoded_password = quote_plus(db_config.password)
+    dsn = f"postgresql://{db_config.user}:{encoded_password}@{db_config.host}:{db_config.port}/{db_config.dbname}"
+
+    sql_path = Path(__file__).parent.parent.parent / "infra" / "sql" / "init-sales.sql"
+
     if not sql_path.exists():
         raise Exception(f"Sample data file not found: {sql_path}")
-    
+
     with open(sql_path, 'r') as f:
         sample_sql = f.read()
-        
+
     conn = None
     try:
         conn = psycopg2.connect(dsn)
         conn.autocommit = True
-        
+
         with conn.cursor() as cur:
             cur.execute(sample_sql)
-            
+
         #verify loaded
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM sales.customers")
             count = cur.fetchone()[0]
-            
+
             if count == 0:
                 raise Exception("Sample data loaded but no customers found")
-            
-        logger.info(f"Sample data loaded: {count} customers")
+
+        logger.info("Sample data loaded", customer_count = count, db_name = db_config.dbname)
 
     finally:
         if conn:
