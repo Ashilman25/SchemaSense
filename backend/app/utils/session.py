@@ -8,16 +8,13 @@ from typing import Optional
 from fastapi import Request, Response
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
-#secrets for signign session cookies
-#change to load from .env later
-SESSION_SECRET_KEY = "secret-key-to-add-to-env-later"
-SESSION_COOKIE_NAME = "schemasense_session"
-SESSION_MAX_AGE_DAYS = 365
+from app.config import get_settings
 
 
 
 def get_session_serializer() -> URLSafeTimedSerializer:
-    return URLSafeTimedSerializer(SESSION_SECRET_KEY)
+    settings = get_settings()
+    return URLSafeTimedSerializer(settings.session_secret_key)
 
 def generate_session_id() -> str:
     random_part = secrets.token_hex(12) #24 chars
@@ -48,34 +45,36 @@ def deserialize_session(signed_session: str, max_age_seconds: Optional[int] = No
     
     
 def get_or_create_session_id(request: Request, response: Response) -> str:
-    session_cookie = request.cookies.get(SESSION_COOKIE_NAME)
-    
+    settings = get_settings()
+    session_cookie = request.cookies.get(settings.session_cookie_name)
+
     if session_cookie:
-        max_age = SESSION_MAX_AGE_DAYS * 24 * 60 * 60
+        max_age = settings.session_max_age_days * 24 * 60 * 60
         session_id = deserialize_session(session_cookie, max_age_seconds = max_age)
-        
+
         if session_id:
             return session_id
-        
-        
+
+
     session_id = generate_session_id()
     signed_session = serialize_session(session_id)
-    
+
     response.set_cookie(
-        key = SESSION_COOKIE_NAME,
+        key = settings.session_cookie_name,
         value = signed_session,
-        max_age = SESSION_MAX_AGE_DAYS * 24 * 60 * 60,
+        max_age = settings.session_max_age_days * 24 * 60 * 60,
         httponly = True,
         secure = False,   #MAKE TRUE FOR PRODUCTION **************
         samesite = "lax"
     )
-    
+
     return session_id
 
 
 
 def clear_session(response: Response) -> None:
-    response.delete_cookie(SESSION_COOKIE_NAME)
+    settings = get_settings()
+    response.delete_cookie(settings.session_cookie_name)
     
     
     

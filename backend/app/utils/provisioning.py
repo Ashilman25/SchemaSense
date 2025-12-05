@@ -49,11 +49,4 @@ def get_role_name_from_db_name(db_name: str) -> str | None:
 
 def get_db_name_from_role_name(role_name: str) -> str | None:
     shortid = extract_shortid_from_role_name(role_name)
-    return f"schemasense_user_{shortid}" if shortid else None
-
-
-
-#default settings
-DEFAULT_STATEMENT_TIMEOUT_MS = 15000 #15 sec
-DEFAULT_IDLE_TIMEOUT_MS = 30000 #30 sec
-DEFAULT_CONNECTION_LIMIT = 10 #10 connects per role 
+    return f"schemasense_user_{shortid}" if shortid else None 

@@ -11,9 +11,17 @@ class Settings(BaseSettings):
     provision_mode_default: str = "managed"
 
     # Admin cluster DSN for provisioning (CREATE DATABASE, CREATE ROLE)
-    # Dev: postgresql://postgres:postgres@postgres:5432/postgres
+    # Must connect to admin/superuser account with permission to create databases and roles
+    # Dev (backend on host): postgresql://schemasense:schemasense_dev@localhost:5432/postgres
+    # Dev (backend in Docker): postgresql://schemasense:schemasense_dev@postgres:5432/postgres
     # Prod: Neon connection string with admin/owner privileges
+    # Note: Connect to 'postgres' database (admin DB), not the app database
     managed_pg_admin_dsn: str = "postgresql://schemasense:schemasense_dev@localhost:5432/postgres"
+
+    # Session management
+    session_secret_key: str = "dev-secret-key-change-in-production"
+    session_cookie_name: str = "schemasense_session"
+    session_max_age_days: int = 365
 
 
     provision_max_dbs_per_session: int = 3  
