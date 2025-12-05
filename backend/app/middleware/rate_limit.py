@@ -48,7 +48,7 @@ def get_rate_limiter() -> RateLimiter:
     return _rate_limiter
 
 
-def check_provision_rate_limit(request: Request, session_id: str, max_requests_per_hour: int = 5) -> None:
+def check_provision_rate_limit(request: Request, session_id: str, max_requests_per_hour: int = 50) -> None:
     client_ip = request.client.host if request.client else "unknown"
     identifier = f"provision:{session_id}:{client_ip}"
     

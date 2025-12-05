@@ -110,8 +110,8 @@ async def provision_db(request: Request, response: Response, body: ProvisionRequ
     client_ip = request.client.host if request.client else "unknown"
     logger.info("Provision request received", session_id = session_id, load_sample = body.loadSampleData)
 
-    # SECURITY: Rate limit provision requests (5 per hour by default)
-    check_provision_rate_limit(request, session_id, max_requests_per_hour = 5)
+    # SECURITY: Rate limit provision requests (50 per hour by default)
+    check_provision_rate_limit(request, session_id, max_requests_per_hour = 50)
 
     mode = body.mode or settings.provision_mode_default
     quota_ok, quota_error = _check_quotas(session_id)
