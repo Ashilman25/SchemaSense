@@ -19,7 +19,7 @@ const nodeTypes = {
     tableNode: TableNode,
 };
 
-const ERDiagram = ({schema, onAskAboutTable, onSchemaUpdate}) => {
+const ERDiagram = ({schema, onAskAboutTable, onSchemaUpdate, isDbConnected}) => {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [nodePositions, setNodePositions] = useState({});
@@ -277,8 +277,9 @@ const ERDiagram = ({schema, onAskAboutTable, onSchemaUpdate}) => {
         return '#3b82f6';
     }
 
-    //UI if no schema data
-    if (!schema || !schema.tables || schema.tables.length === 0) {
+    // Show "Connect to database" message ONLY if not connected
+    // If connected but empty, show the empty ER diagram canvas with Add Table button
+    if (!isDbConnected) {
         return (
             <div className = "h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
                 <div className = "text-center">
@@ -286,7 +287,7 @@ const ERDiagram = ({schema, onAskAboutTable, onSchemaUpdate}) => {
                         <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
 
-                    <p className = "text-sm">No schema data available</p>
+                    <p className = "text-sm font-medium">No database connected</p>
                     <p className = "text-xs mt-2">Connect to a database to view the ER diagram</p>
                 </div>
             </div>
