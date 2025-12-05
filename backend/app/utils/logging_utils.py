@@ -67,3 +67,56 @@ def safe_log_dict(data: Dict[str, Any], logger: logging.Logger, level: int = log
         
         
     
+    
+    
+class SecureLogger:
+    
+    def __init__(self, name: str):
+        self.logger = logging.getLogger(name)
+        
+    #keywords redacting
+    def _redact_kwargs(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        redacted = {}
+        
+        for key, value in kwargs.items():
+            if isinstance(value, str) and value.startswith('postgresql://'):
+                redacted[key] = redact_password_from_dsn(value)
+                
+            elif isinstance(value, dict):
+                redacted[key] = redact_dict(value)
+                
+            else:
+                redacted[key] = value
+                
+        return redacted
+    
+    #format the redacted keywords
+    def _format_message(self, msg: str, kwargs: Dict[str, Any]) -> str:
+        if not kwargs:
+            return msg
+
+        redacted = self._redact_kwargs(kwargs)
+        extras = " | ".join(f"{k}={v}" for k, v in redacted.items())
+        
+        return f"{msg} | {extras}" if msg else extras
+    
+    
+    #sensitive message logs
+    def debug(self, msg: str, **kwargs):
+        self.logger.debug(self._format_message(msg, kwargs))
+
+    def info(self, msg: str, **kwargs):
+        self.logger.info(self._format_message(msg, kwargs))
+
+    def warning(self, msg: str, **kwargs):
+        self.logger.warning(self._format_message(msg, kwargs))
+
+    def error(self, msg: str, exc_info: bool = False, **kwargs):
+        self.logger.error(self._format_message(msg, kwargs), exc_info = exc_info)
+
+    def critical(self, msg: str, exc_info: bool = False, **kwargs):
+        self.logger.critical(self._format_message(msg, kwargs), exc_info = exc_info)
+        
+        
+def get_secure_logger(name: str) -> SecureLogger:
+    return SecureLogger(name)
