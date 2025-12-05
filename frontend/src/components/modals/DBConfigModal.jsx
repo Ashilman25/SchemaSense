@@ -169,7 +169,7 @@ const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess }) => {
                   />
 
                   <label htmlFor = "loadSampleData" className = "text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Load sample sales data
+                    Load demo sales data
                   </label>
                 </div>
 
@@ -194,7 +194,7 @@ const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess }) => {
                         <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
 
-                      <span>Create SchemaSense-managed Postgres</span>
+                      <span>Create SchemaSense-managed Database</span>
                     </>
                   )}
                 </button>
@@ -320,7 +320,7 @@ const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess }) => {
                     )}
                   </button>
                 </div>
-                
+
               </div>
             </div>
 
