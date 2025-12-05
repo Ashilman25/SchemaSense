@@ -47,3 +47,23 @@ def redact_dict(data: Dict[str, Any], sensitive_keys: Optional[list[str]] = None
             
     return redacted
         
+        
+        
+#logging dsn with redaction
+def safe_log_dsn(dsn: str, logger: logging.Logger, level: int = logging.INFO, prefix: str = "") -> None:
+    redacted = redact_password_from_dsn(dsn)
+    message = f"{prefix}{redacted}" if prefix else redacted
+    logger.log(level, message)
+    
+
+
+def safe_log_dict(data: Dict[str, Any], logger: logging.Logger, level: int = logging.INFO, message: str = "", sensitive_keys: Optional[list[str]] = None) -> None:
+    redacted = redact_dict(data, sensitive_keys)
+
+    if message:
+        logger.log(level, f"{message}: {redacted}")
+    else:
+        logger.log(level, redacted)
+        
+        
+    
