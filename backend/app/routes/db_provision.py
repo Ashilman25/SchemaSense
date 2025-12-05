@@ -11,7 +11,7 @@ from app.utils.session import get_or_create_session_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix = "/api/db", tags=["provisioning"])
-co
+
 
 class ProvisionRequest(BaseModel):
     mode: Optional[str] = Field(default = None, description = "Provisioning mode: 'managed'")
@@ -66,6 +66,32 @@ def _check_quotas(session_id: str) -> tuple[bool, Optional[str]]:
     except Exception as e:
         logger.error(f"Quota check failed: {str(e)}")
         return True, None
+    
+    finally:
+        if conn:
+            conn.close()
+
+
+
+def _verify_connectivity(db_config: DatabaseConfig) -> bool:
+    from urllib.parse import quote_plus
+    
+    encoded_password = quote_plus(db_config.password)
+    dsn = f"postgresql://{db_config.user}:{encoded_password}@{db_config.host}:{db_config.port}/{db_config.dbname}"
+    conn = None
+    
+    try:
+        conn = psycopg2.connect(dsn)
+        
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1") #ping
+            result = cur.fetchone()
+            
+            return result[0] == 1
+        
+    except Exception as e:
+        logger.error(f"Connectivity verification failed: {str(e)}")
+        return False
     
     finally:
         if conn:
