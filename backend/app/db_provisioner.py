@@ -106,7 +106,7 @@ def _provision_managed_database(session_id: Optional[str], load_sample: bool) ->
         #sample data if doing it
         if load_sample and settings.enable_sample_data:
             try:
-                #_load_sample_data(db_config)
+                _load_sample_data(db_config)
                 logger.info(f"Sample data loaded successfully for {db_name}")
                 
             except Exception as e:
@@ -148,3 +148,36 @@ def _provision_managed_database(session_id: Optional[str], load_sample: bool) ->
             admin_conn.close()
 
         
+
+def _load_sample_data(db_config: DatabaseConfig) -> None:
+    dsn = f"postgresql://{db_config.user}:{db_config.password}@{db_config.host}:{db_config.port}/{db_config.dbname}"
+    sql_path = Path(__file__).parent.parent.parent / "infra" / "sql" / "init-sales.sql"
+    
+    if not sql_path.exists():
+        raise Exception(f"Sample data file not found: {sql_path}")
+    
+    with open(sql_path, 'r') as f:
+        sample_sql = f.read()
+        
+    conn = None
+    try:
+        conn = psycopg2.connect(dsn)
+        conn.autocommit = True
+        
+        with conn.cursor() as cur:
+            cur.execute(sample_sql)
+            
+        #verify loaded
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM sales.customers")
+            count = cur.fetchone()[0]
+            
+            if count == 0:
+                raise Exception("Sample data loaded but no customers found")
+            
+        logger.info(f"Sample data loaded: {count} customers")
+
+    finally:
+        if conn:
+            conn.close()
+
