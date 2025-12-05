@@ -3,6 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from psycopg2.extras import RealDictCursor
+import psycopg2.errors
 
 from app.db import get_connection
 
@@ -27,12 +28,15 @@ class HistoryItemResponse(BaseModel):
     
 
 def _init_history_table():
+    conn = None
+    cursor = None
+    
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("CREATE SCHEMA IF NOT EXISTS schemasense;")
-        
+
         cursor.execute("""
                        CREATE TABLE IF NOT EXISTS schemasense.query_history(
                            id SERIAL PRIMARY KEY,
@@ -44,23 +48,38 @@ def _init_history_table():
                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                        );
                        """)
-        
+
         cursor.execute("""
                        CREATE INDEX IF NOT EXISTS idx_query_history_timestamp
                        ON schemasense.query_history(timestamp DESC);
                        """)
-        
+
         cursor.execute("""
                        CREATE INDEX IF NOT EXISTS idx_query_history_status
                        ON schemasense.query_history(status);
                        """)
-        
+
         conn.commit()
-        cursor.close()
-        conn.close()
+
+    except Exception as e:
+        print(f"Warning: Failed to initialize history table: {str(e)}")
         
-    except Exception:
-        pass    
+        if conn:
+            try:
+                conn.rollback()
+            except:
+                pass
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass    
     
     
 
@@ -97,24 +116,25 @@ def add_history(item: HistoryItemCreate):
     
 @router.get("", response_model = List[HistoryItemResponse])
 def list_history(limit: int = 50):
+    conn = None
+    cursor = None
+    
     try:
         limit = min(limit, 200) #might change limit idk
         _init_history_table()
-        
+
         conn = get_connection()
         cursor = conn.cursor(cursor_factory = RealDictCursor) #makes it return the rows as dicts instead of tuples
-        
+
         cursor.execute("""
                        SELECT id, timestamp, question, sql, status, execution_duration_ms
                        FROM schemasense.query_history
                        ORDER BY timestamp DESC
                        LIMIT %s
                        """, (limit,))
-        
+
         rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        
+
         #convert to the history item response format
         history = []
         for each in rows:
@@ -128,9 +148,25 @@ def list_history(limit: int = 50):
             ))
 
         return history
-    
+
     except Exception as e:
+        # If table doesn't exist, return empty history instead of error
+        if isinstance(e, psycopg2.errors.UndefinedTable):
+            return []
+        
         raise HTTPException(status_code = 500, detail = f"Failed to retrieve history: {str(e)}")
+
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except:
+                pass
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
 
 
 @router.delete("/{history_id}", response_model = dict)
