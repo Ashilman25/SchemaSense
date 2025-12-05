@@ -96,3 +96,76 @@ def _verify_connectivity(db_config: DatabaseConfig) -> bool:
     finally:
         if conn:
             conn.close()
+
+
+
+#body: {"mode": str, "loadSampleData" : bool}
+#returns: {"success" : bool, "mode": str, "connection" : {db_model with all 5 things, host, port, name...}}
+@router.post("/privision")
+async def provision_db(request: Request, response: Response, body: ProvisionRequest):
+    settings = get_settings()
+    
+    session_id = get_or_create_session_id(request, response)
+    logger.info(f"Provision request from session: {session_id}")
+    
+    mode = body.mode or settings.provision_mode_default
+    quota_ok, quota_error = _check_quotas(session_id)
+    
+    if not quota_ok:
+        logger.warning(f"Quota exceeded for session {session_id}: {quota_error}")
+        raise HTTPException(
+            status_code = 429,
+            detail = {
+                "success" : False,
+                "error" : "quota_exceeded",
+                "message" : quota_error
+            }
+        )
+        
+    #provision the db
+    try:
+        db_config = provision_database(
+            mode = mode,
+            session_id = session_id,
+            load_sample = body.loadSampleData
+        )
+        logger.info(f"Database provisioned successfully: {db_config.dbname}")
+        
+        if not _verify_connectivity(db_config):
+            logger.error(f"Connectivity verification failed for {db_config.dbname}")
+            raise Exception("Database created but connectivity verification failed")
+        
+        set_database_config(db_config)
+        logger.info(f"Database config set for session: {session_id}")
+        
+        return {
+            "success" : True,
+            "mode" : mode,
+            "connection" : db_config.dict()
+        }
+
+        
+    
+    except NotImplementedError as e:
+        logger.error(f"Unsupported provisioning mode: {mode}")
+        raise HTTPException(
+            status_code = 400,
+            detail = {
+                "success" : False,
+                "error" : "unsupported_mode",
+                "message" : str(e)
+            }
+        )
+    
+    except Exception as e:
+        logger.error(f"Provisioning failed: {str(e)}", exc_info = True)
+        raise HTTPException(
+            status_code = 500,
+            detail = {
+                "success" : False,
+                "error" : "provision_fauled",
+                "message" : f"Failed to provision database: {str(e)}"
+            }
+        )
+
+    
