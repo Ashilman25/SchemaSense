@@ -76,3 +76,25 @@ def get_or_create_session_id(request: Request, response: Response) -> str:
 
 def clear_session(response: Response) -> None:
     response.delete_cookie(SESSION_COOKIE_NAME)
+    
+    
+    
+    
+#MAYBE FOR FUTURE
+#JUST WANTED TO MAKE IT FOR NOW
+class SessionStore:
+    
+    def __init__(self, db_connection):
+        self.db = db_connection
+        
+    async def create_session(self, metadata: dict) -> str:
+        raise NotImplementedError("Databased backed sessions not implemented yet")
+    
+    async def get_session(self, session_id: str) -> Optional[dict]:
+        raise NotImplementedError("Databased backed sessions not implemented yet")
+
+    async def update_session(self, session_id: str, metadata: dict) -> None:
+        raise NotImplementedError("Databased backed sessions not implemented yet")
+
+    async def delete_session(self, session_id: str) -> None:
+        raise NotImplementedError("Databased backed sessions not implemented yet")
