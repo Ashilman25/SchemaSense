@@ -17,7 +17,7 @@ class ProvisionRequest(BaseModel):
     mode: Optional[str] = Field(default = None, description = "Provisioning mode: 'managed'")
     loadSampleData: bool = Field(default = False, description = "Whether to load sample sales data")
     
-class ProvisionErrorResponse(BaseModel):
+class ProvisionResponse(BaseModel):
     success: bool
     mode: str
     connection: DatabaseConfig
@@ -25,7 +25,7 @@ class ProvisionErrorResponse(BaseModel):
 class ProvisionErrorResponse(BaseModel):
     success: bool = False
     error: str
-    messsage: str
+    message: str
     
 class DeprovisionRequest(BaseModel):
     db_name: Optional[str] = None
@@ -101,7 +101,7 @@ def _verify_connectivity(db_config: DatabaseConfig) -> bool:
 
 #body: {"mode": str, "loadSampleData" : bool}
 #returns: {"success" : bool, "mode": str, "connection" : {db_model with all 5 things, host, port, name...}}
-@router.post("/privision")
+@router.post("/provision")
 async def provision_db(request: Request, response: Response, body: ProvisionRequest):
     settings = get_settings()
     
@@ -163,9 +163,118 @@ async def provision_db(request: Request, response: Response, body: ProvisionRequ
             status_code = 500,
             detail = {
                 "success" : False,
-                "error" : "provision_fauled",
+                "error" : "provision_failed",
                 "message" : f"Failed to provision database: {str(e)}"
             }
         )
 
+    
+    
+    
+#body: {db_name: str, id: int}, most likely not both, one or other   
+    
+@router.post("/deprovision")
+async def deprovision_db(body: DeprovisionRequest):
+    settings = get_settings()
+    
+    if not body.db_name and not body.id:
+        raise HTTPException(
+            status_code = 400,
+            detail = {
+                "success" : False,
+                "error" : "missing_identifier",
+                "message" : "Either db_name or id must be provided"
+            }
+        )
+        
+    admin_dsn = settings.managed_pg_admin_dsn
+    conn = None
+    
+    try:
+        conn = psycopg2.connect(admin_dsn)
+        conn.autocommit = True
+        
+        with conn.cursor() as cur:
+            if body.db_name:
+                cur.execute("""
+                            SELECT id, db_name, db_role, status
+                            FROM provisioned_dbs
+                            WHERE db_name = %s
+                            """, (body.db_name,))
+            else:
+                cur.execute("""
+                            SELECT id, db_name, db_role, status
+                            FROM provisioned_dbs
+                            WHERE id = %s
+                            """, (body.id,))
+                
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(
+                    status_code = 404,
+                    detail = {
+                        "success" : False,
+                        "error" : "not_found",
+                        "message" : "Database not found in provisioned_dbs"
+                    }
+                )
+                
+            db_id, db_name, db_role, status = row
+            
+            if status == "deleted":
+                return {
+                    "success" : True,
+                    "message" : f"Database {db_name} already marked as deleted"
+                }
+                
+        #drop db and role
+        with conn.cursor() as cur:
+            logger.info(f"Dropping database: {db_name}")
+            
+            cur.execute("""
+                        SELECT pg_terminate_backend(pid)
+                        FROM pg_stat_activity
+                        WHERE datname = %s AND pid <> pg_backend_pid()
+                        """, (db_name,))
+            
+            cur.execute(f"DROP DATABASE IF EXISTS {db_name}")
+            cur.execute(f"DROP ROLE IF EXISTS {db_role}")
+            
+            logger.info(f"Dropped database {db_name} and role {db_role}")
+            
+        #update metadata
+        with conn.cursor() as cur:
+            cur.execute("""
+                        UPDATE provisioned_dbs
+                        SET status = 'deleted'
+                        WHERE id = %s
+                        """, (db_id,))
+            
+        logger.info(f"Deprovisioned database: {db_name}")
+        
+        return {
+            "success" : True,
+            "message" : f"Database {db_name} deprovisioned successfully"
+        }
+    
+    
+    except HTTPException:
+        raise
+    
+    except Exception as e:
+        logger.error(f"Deprovisioning failed: {str(e)}", exc_info = True)
+        raise HTTPException(
+            status_code = 500,
+            detail = {
+                "success" : False,
+                "error" : "deprovision_failed",
+                "message" : f"Failed to deprovision database: {str(e)}"
+            }
+        )
+    
+    finally:
+        if conn:
+            conn.close()
+    
+    
     

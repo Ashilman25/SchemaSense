@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class DatabaseConfig(BaseModel):
     host: str
-    port: str
+    port: int
     dbname: str
     user: str
     password: str
@@ -23,6 +23,8 @@ def provision_database(mode: str, session_id: Optional[str] = None, load_sample:
     if mode == "managed":
         return _provision_managed_database(session_id, load_sample)
     
+    elif mode == "ephemeral":
+        raise NotImplementedError("maybe later")
     else:        
         raise ValueError(f"Invalid provisioning mode: {mode}. Expected 'managed'.")
     
@@ -181,3 +183,7 @@ def _load_sample_data(db_config: DatabaseConfig) -> None:
         if conn:
             conn.close()
 
+
+
+def deprovision_database(identifier: str) -> None:
+    raise NotImplementedError("Database deprovisioning not yet implemented")
