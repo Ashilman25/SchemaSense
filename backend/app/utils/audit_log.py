@@ -116,3 +116,73 @@ def log_db_deprovision_failure(session_id: str, user_ip: str, db_name: Optional[
     )
     
     event.log(logging.WARNING)
+    
+    
+    
+    
+def log_quota_exceeded(session_id: str, user_ip: str, quota_type: str, current_count: int, limit: int) -> None:
+    event = AuditEvent(
+        event_type = AuditEventType.QUOTA_EXCEEDED,
+        session_id = session_id,
+        user_ip = user_ip,
+        details = {
+            "quota_type": quota_type,
+            "current_count": current_count,
+            "limit": limit
+        },
+        success = False
+    )
+    
+    event.log(logging.WARNING)
+    
+    
+    
+    
+def log_rate_limit_exceeded(session_id: str, user_ip: str, endpoint: str, retry_after: int) -> None:
+    event = AuditEvent(
+        event_type = AuditEventType.RATE_LIMIT_EXCEEDED,
+        session_id = session_id,
+        user_ip = user_ip,
+        details = {
+            "endpoint": endpoint,
+            "retry_after": retry_after
+        },
+        success = False
+    )
+    
+    event.log(logging.WARNING)
+    
+    
+    
+def log_db_config_changed(session_id: str, user_ip: str, host: str, port: int, dbname: str) -> None:
+    event = AuditEvent(
+        event_type = AuditEventType.DB_CONFIG_CHANGED,
+        session_id = session_id,
+        user_ip = user_ip,
+        details = {
+            "host" : host,
+            "port" : port,
+            "dbname" : dbname
+        },
+        success = True
+    )
+    
+    event.log(logging.INFO)
+    
+    
+    
+def log_sql_validation_blocked(session_id: str, user_ip: str, reason: str, sql_snippet: Optional[str] = None) -> None:
+    details = {"reason" : reason}
+
+    if sql_snippet:
+        details["sql_snippet"] = sql_snippet[:100] + ("..." if len(sql_snippet) > 100 else "")
+
+    event = AuditEvent(
+        event_type = AuditEventType.SQL_VALIDATION_BLOCKED,
+        session_id = session_id,
+        user_ip = user_ip,
+        details = details,
+        success = False
+    )
+    
+    event.log(logging.WARNING)
