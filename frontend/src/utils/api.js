@@ -51,6 +51,19 @@ export const dbConfigAPI = {
       method: 'GET',
     });
   },
+
+  //provision a managed database
+  //on success returns: {success: true, mode: "managed", connection: {host, port, dbname, user, password}}
+  //on fail returns: {success: false, error: "quota_exceeded"|"provision_failed", message: "..."}
+  provision: async (loadSampleData = false) => {
+    return apiRequest('/api/db/provision', {
+      method: 'POST',
+      body: JSON.stringify({
+        mode: 'managed',
+        loadSampleData: loadSampleData,
+      }),
+    });
+  },
 };
 
 
