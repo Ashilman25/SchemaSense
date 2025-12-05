@@ -85,3 +85,34 @@ def log_db_provision_failure(session_id: str, user_ip: str, error: str, mode: Op
     )
     
     event.log(logging.WARNING)
+
+
+
+
+def log_db_deprovision_success(session_id: str, user_ip: str, db_name: str, db_id: int) -> None:
+    event = AuditEvent(
+        event_type = AuditEventType.DB_DEPROVISION_SUCCESS,
+        session_id = session_id,
+        user_ip = user_ip,
+        details = {
+            "db_name" : db_name,
+            "db_id" : db_id
+        },
+        success = True
+    )
+    
+    event.log(logging.INFO)
+    
+    
+    
+def log_db_deprovision_failure(session_id: str, user_ip: str, db_name: Optional[str], error: str) -> None:
+    event = AuditEvent(
+        event_type = AuditEventType.DB_DEPROVISION_FAILURE,
+        session_id = session_id,
+        user_ip = user_ip,
+        details = {"db_name": db_name} if db_name else {},
+        success = False,
+        error_message = error
+    )
+    
+    event.log(logging.WARNING)
