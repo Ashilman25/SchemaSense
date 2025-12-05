@@ -54,3 +54,34 @@ class AuditEvent:
     def log(self, level: int = logging.INFO) -> None:
         audit_logger.log(level, f"AUDIT: {self.event_type.value}", extra = self.to_dict())
             
+            
+            
+def log_db_provision_success(session_id: str, user_ip: str, db_name: str, mode: str, load_sample: bool) -> None:
+    event = AuditEvent(
+        event_type = AuditEventType.DB_PROVISION_SUCCESS,
+        session_id = session_id,
+        user_ip = user_ip,
+        details = {
+            "db_name" : db_name,
+            "mode" : mode,
+            "load_sample" : load_sample
+        },
+        success = True
+    )
+    
+    event.log(logging.INFO)
+    
+    
+    
+
+def log_db_provision_failure(session_id: str, user_ip: str, error: str, mode: Optional[str] = None) -> None:
+    event = AuditEvent(
+        event_type = AuditEventType.DB_PROVISION_FAILURE,
+        session_id = session_id,
+        user_ip = user_ip,
+        details = {"mode" : mode} if mode else {},
+        success = False,
+        error_message = error
+    )
+    
+    event.log(logging.WARNING)
