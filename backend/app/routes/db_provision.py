@@ -1,4 +1,3 @@
-import logging
 import psycopg2
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -8,8 +7,11 @@ from app.config import get_settings
 from app.db_provisioner import provision_database, DatabaseConfig
 from app.db import set_database_config
 from app.utils.session import get_or_create_session_id
+from app.utils.logging_utils import get_secure_logger
+from app.middleware.rate_limit import check_provision_rate_limit
+from app.utils import audit_log
 
-logger = logging.getLogger(__name__)
+logger = get_secure_logger(__name__)
 router = APIRouter(prefix = "/api/db", tags=["provisioning"])
 
 
@@ -61,10 +63,9 @@ def _check_quotas(session_id: str) -> tuple[bool, Optional[str]]:
                 return False, f"Global quota exceeded. Please try again later."
             
         return True, None
-
-        
+    
     except Exception as e:
-        logger.error(f"Quota check failed: {str(e)}")
+        logger.error("Quota check failed", error = str(e))
         return True, None
     
     finally:
@@ -75,22 +76,22 @@ def _check_quotas(session_id: str) -> tuple[bool, Optional[str]]:
 
 def _verify_connectivity(db_config: DatabaseConfig) -> bool:
     from urllib.parse import quote_plus
-    
+
     encoded_password = quote_plus(db_config.password)
     dsn = f"postgresql://{db_config.user}:{encoded_password}@{db_config.host}:{db_config.port}/{db_config.dbname}"
     conn = None
-    
+
     try:
         conn = psycopg2.connect(dsn)
-        
+
         with conn.cursor() as cur:
             cur.execute("SELECT 1") #ping
             result = cur.fetchone()
-            
+
             return result[0] == 1
-        
+
     except Exception as e:
-        logger.error(f"Connectivity verification failed: {str(e)}")
+        logger.error("Connectivity verification failed", db_name = db_config.dbname, error = str(e))
         return False
     
     finally:
@@ -104,15 +105,27 @@ def _verify_connectivity(db_config: DatabaseConfig) -> bool:
 @router.post("/provision")
 async def provision_db(request: Request, response: Response, body: ProvisionRequest):
     settings = get_settings()
-    
+
     session_id = get_or_create_session_id(request, response)
-    logger.info(f"Provision request from session: {session_id}")
-    
+    client_ip = request.client.host if request.client else "unknown"
+    logger.info("Provision request received", session_id = session_id, load_sample = body.loadSampleData)
+
+    # SECURITY: Rate limit provision requests (5 per hour by default)
+    check_provision_rate_limit(request, session_id, max_requests_per_hour = 5)
+
     mode = body.mode or settings.provision_mode_default
     quota_ok, quota_error = _check_quotas(session_id)
-    
+
     if not quota_ok:
-        logger.warning(f"Quota exceeded for session {session_id}: {quota_error}")
+        logger.warning("Quota exceeded", session_id = session_id, reason = quota_error)
+        # AUDIT: Log quota violation
+        audit_log.log_quota_exceeded(
+            session_id = session_id,
+            user_ip = client_ip,
+            quota_type = "session" if "Session" in quota_error else "global",
+            current_count = 0,  # Would need to extract from quota check
+            limit = settings.provision_max_dbs_per_session if "Session" in quota_error else settings.provision_global_max_dbs
+        )
         raise HTTPException(
             status_code = 429,
             detail = {
@@ -129,15 +142,24 @@ async def provision_db(request: Request, response: Response, body: ProvisionRequ
             session_id = session_id,
             load_sample = body.loadSampleData
         )
-        logger.info(f"Database provisioned successfully: {db_config.dbname}")
-        
+        logger.info("Database provisioned successfully", db_name = db_config.dbname, session_id = session_id)
+
         if not _verify_connectivity(db_config):
-            logger.error(f"Connectivity verification failed for {db_config.dbname}")
+            logger.error("Connectivity verification failed", db_name = db_config.dbname)
             raise Exception("Database created but connectivity verification failed")
-        
+
         set_database_config(db_config)
-        logger.info(f"Database config set for session: {session_id}")
-        
+        logger.info("Database config set for session", session_id = session_id, db_name = db_config.dbname)
+
+
+        audit_log.log_db_provision_success(
+            session_id = session_id,
+            user_ip = client_ip,
+            db_name = db_config.dbname,
+            mode = mode,
+            load_sample = body.loadSampleData
+        )
+
         return {
             "success" : True,
             "mode" : mode,
@@ -145,9 +167,10 @@ async def provision_db(request: Request, response: Response, body: ProvisionRequ
         }
 
         
-    
+
+
     except NotImplementedError as e:
-        logger.error(f"Unsupported provisioning mode: {mode}")
+        logger.error("Unsupported provisioning mode", mode = mode, session_id = session_id)
         raise HTTPException(
             status_code = 400,
             detail = {
@@ -156,9 +179,17 @@ async def provision_db(request: Request, response: Response, body: ProvisionRequ
                 "message" : str(e)
             }
         )
-    
+
     except Exception as e:
-        logger.error(f"Provisioning failed: {str(e)}", exc_info = True)
+        logger.error("Provisioning failed", session_id = session_id, error = str(e), exc_info = True)
+        
+        audit_log.log_db_provision_failure(
+            session_id = session_id,
+            user_ip = client_ip,
+            error = str(e),
+            mode = mode
+        )
+        
         raise HTTPException(
             status_code = 500,
             detail = {
@@ -174,9 +205,11 @@ async def provision_db(request: Request, response: Response, body: ProvisionRequ
 #body: {db_name: str, id: int}, most likely not both, one or other   
     
 @router.post("/deprovision")
-async def deprovision_db(body: DeprovisionRequest):
+async def deprovision_db(request: Request, body: DeprovisionRequest):
     settings = get_settings()
-    
+    client_ip = request.client.host if request.client else "unknown"
+    session_id = "admin"  # Deprovision is admin-only for now
+
     if not body.db_name and not body.id:
         raise HTTPException(
             status_code = 400,
@@ -186,7 +219,7 @@ async def deprovision_db(body: DeprovisionRequest):
                 "message" : "Either db_name or id must be provided"
             }
         )
-        
+
     admin_dsn = settings.managed_pg_admin_dsn
     conn = None
     
@@ -229,19 +262,19 @@ async def deprovision_db(body: DeprovisionRequest):
                 
         #drop db and role
         with conn.cursor() as cur:
-            logger.info(f"Dropping database: {db_name}")
-            
+            logger.info("Dropping database", db_name = db_name, db_id = db_id)
+
             cur.execute("""
                         SELECT pg_terminate_backend(pid)
                         FROM pg_stat_activity
                         WHERE datname = %s AND pid <> pg_backend_pid()
                         """, (db_name,))
-            
+
             cur.execute(f"DROP DATABASE IF EXISTS {db_name}")
             cur.execute(f"DROP ROLE IF EXISTS {db_role}")
-            
-            logger.info(f"Dropped database {db_name} and role {db_role}")
-            
+
+            logger.info("Dropped database and role", db_name = db_name, db_role = db_role)
+
         #update metadata
         with conn.cursor() as cur:
             cur.execute("""
@@ -249,9 +282,16 @@ async def deprovision_db(body: DeprovisionRequest):
                         SET status = 'deleted'
                         WHERE id = %s
                         """, (db_id,))
-            
-        logger.info(f"Deprovisioned database: {db_name}")
-        
+
+        logger.info("Deprovisioned database", db_name = db_name, db_id = db_id)
+
+        audit_log.log_db_deprovision_success(
+            session_id = session_id,
+            user_ip = client_ip,
+            db_name = db_name,
+            db_id = db_id
+        )
+
         return {
             "success" : True,
             "message" : f"Database {db_name} deprovisioned successfully"
@@ -260,9 +300,16 @@ async def deprovision_db(body: DeprovisionRequest):
     
     except HTTPException:
         raise
-    
+
     except Exception as e:
-        logger.error(f"Deprovisioning failed: {str(e)}", exc_info = True)
+        logger.error("Deprovisioning failed", error = str(e), exc_info = True)
+
+        audit_log.log_db_deprovision_failure(
+            session_id = session_id,
+            user_ip = client_ip,
+            db_name = body.db_name,
+            error = str(e)
+        )
         raise HTTPException(
             status_code = 500,
             detail = {
