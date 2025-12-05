@@ -1,0 +1,150 @@
+import psycopg2
+import logging
+from typing import Optional
+from pathlib import Path
+from pydantic import BaseModel
+
+from app.config import get_settings
+from app.utils.provisioning import generate_db_name, generate_role_name, generate_strong_password
+
+logger = logging.getLogger(__name__)
+
+class DatabaseConfig(BaseModel):
+    host: str
+    port: str
+    dbname: str
+    user: str
+    password: str
+    
+    
+def provision_database(mode: str, session_id: Optional[str] = None, load_sample: bool = False) -> DatabaseConfig:
+    settings = get_settings()
+    
+    if mode == "managed":
+        return _provision_managed_database(session_id, load_sample)
+    
+    else:        
+        raise ValueError(f"Invalid provisioning mode: {mode}. Expected 'managed'.")
+    
+    
+
+#db in shared postgres cluster
+def _provision_managed_database(session_id: Optional[str], load_sample: bool) -> DatabaseConfig:
+    settings = get_settings()
+    
+    db_name = generate_db_name()
+    role_name = generate_role_name()
+    password = generate_strong_password()
+    
+    admin_dsn = settings.managed_pg_admin_dsn
+    
+    logger.info(f"Starting provisioning for session_id = {session_id}, db = {db_name}")
+    
+    admin_conn = None
+    role_created = False
+    db_created = False
+    metadata_recorded = False
+    
+    try:
+        admin_conn = psycopg2.connect(admin_dsn)
+        admin_conn.autocommit = True #required for CREATE DATABASE
+        
+        with admin_conn.cursor() as cur:
+            cur.execute(f"""
+                        CREATE ROLE {role_name}
+                        LOGIN
+                        PASSWORD %s
+                        NOSUPERUSER
+                        NOCREATEDB
+                        NOCREATEROLE
+                        NOREPLICATION
+                        CONNECTION LIMIT {settings.provision_connection_limit_per_role}
+                        """, (password,))
+            
+            role_created = True
+            logger.info(f"Created role: {role_name}")
+            
+            #role level timeouts
+            cur.execute(f"ALTER ROLE {role_name} SET statement_timeout = {settings.provision_default_statement_timeout_ms}")
+            cur.execute(f"ALTER ROLE {role_name} SET idle_in_transaction_session_timeout = {settings.provision_idle_in_transaction_timeout_ms}")
+            
+            #new db owned by this new role
+            cur.execute(f"CREATE DATABASE {db_name} OWNER {role_name}")
+            db_created = True
+            logger.info(f"Created database: {db_name}")
+            
+            #metadata
+            cur.execute("""
+                        INSERT INTO provisioned_dbs
+                        (session_id, db_name, db_role, mode, status)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """, (session_id or "anonymous", db_name, role_name, "managed", "active"))
+            
+            metadata_recorded = True
+            logger.info(f"Recorded metadata for {db_name}")
+            
+        #parse host and port
+        import re
+        match = re.match(r'postgresql://[^@]+@([^:]+):(\d+)/', admin_dsn)
+        
+        if match:
+            host = match.group(1)
+            port = int(match.group(2))
+            
+        else:
+            host = "localhost"
+            port = 5432
+            
+        db_config = DatabaseConfig(
+            host = host,
+            port = port,
+            dbname = db_name,
+            user = role_name,
+            password = password
+        )
+        
+        #sample data if doing it
+        if load_sample and settings.enable_sample_data:
+            try:
+                #_load_sample_data(db_config)
+                logger.info(f"Sample data loaded successfully for {db_name}")
+                
+            except Exception as e:
+                logger.error(f"Failed to load sample data for {db_name}: {str(e)}")
+                
+                with admin_conn.cursor() as cur:
+                    cur.execute("UPDATE provisioned_dbs SET status = %s WHERE db_name = %s", ("error", db_name))
+                    
+                raise Exception(f"Database created but sample data loading failed: {str(e)}")
+            
+        return db_config
+
+
+    
+    except Exception as e:
+        logger.error(f"Provisioning failed for {db_name}: {str(e)}", exc_info=True)
+        
+        #clean
+        if admin_conn:
+            try:
+                with admin_conn.cursor() as cur:
+                    if db_created:
+                        logger.info(f"Attempting to drop database: {db_name}")
+                        cur.execute(f"DROP DATABASE IF EXISTS {db_name}")
+                        
+                    if role_created:
+                        logger.info(f"Attempting to drop role: {role_name}")
+                        cur.execute(f"DROP ROLE IF EXISTS {role_name}")
+                        
+                logger.info("Cleanup completed")
+            
+            except Exception as cleanup_error:
+                logger.error(f"Cleanup failed: {str(cleanup_error)}")
+                
+        raise Exception(f"Failed to provision managed database: {str(e)}")
+    
+    finally:
+        if admin_conn:
+            admin_conn.close()
+
+        
