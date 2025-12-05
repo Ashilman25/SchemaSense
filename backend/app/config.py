@@ -1,5 +1,7 @@
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
+import sys
 
 
 class Settings(BaseSettings):
@@ -12,8 +14,10 @@ class Settings(BaseSettings):
 
     # Admin cluster DSN for provisioning (CREATE DATABASE, CREATE ROLE)
     # Must connect to admin/superuser account with permission to create databases and roles
+    
     # Dev (backend on host): postgresql://schemasense:schemasense_dev@localhost:5432/postgres
     # Dev (backend in Docker): postgresql://schemasense:schemasense_dev@postgres:5432/postgres
+    
     # Prod: Neon connection string with admin/owner privileges
     # Note: Connect to 'postgres' database (admin DB), not the app database
     managed_pg_admin_dsn: str = "postgresql://schemasense:schemasense_dev@localhost:5432/postgres"
@@ -40,6 +44,60 @@ class Settings(BaseSettings):
         env_prefix = "SCHEMASENSE_",
         case_sensitive = False,
     )
+
+    @field_validator("managed_pg_admin_dsn")
+    @classmethod
+    def validate_admin_dsn_in_production(cls, v: str, info) -> str:
+        environment = info.data.get("environment", "development")
+
+        # In production or demo, require a non-default DSN
+        if environment in ("production", "prod", "demo"):
+            default_dsns = [
+                "postgresql://schemasense:schemasense_dev@localhost:5432/postgres",
+                "postgresql://schemasense:schemasense_dev@postgres:5432/postgres",
+            ]
+
+            if v in default_dsns:
+                print(
+                    f"\n{'='*80}\n"
+                    f"FATAL ERROR: MANAGED_PG_ADMIN_DSN must be configured for {environment} environment.\n"
+                    f"The default development DSN is not allowed in production.\n"
+                    f"Please set SCHEMASENSE_MANAGED_PG_ADMIN_DSN environment variable.\n"
+                    f"{'='*80}\n",
+                    file=sys.stderr
+                )
+                sys.exit(1)
+
+        # validate DSN format
+        if not v.startswith("postgresql://"):
+            print(
+                f"\n{'='*80}\n"
+                f"FATAL ERROR: MANAGED_PG_ADMIN_DSN must be a valid PostgreSQL connection string.\n"
+                f"Expected format: postgresql://user:password@host:port/database\n"
+                f"{'='*80}\n",
+                file=sys.stderr
+            )
+            sys.exit(1)
+
+        return v
+
+    @field_validator("session_secret_key")
+    @classmethod
+    def validate_session_secret_in_production(cls, v: str, info) -> str:
+        environment = info.data.get("environment", "development")
+
+        if environment in ("production", "prod", "demo"):
+            if v == "dev-secret-key-change-in-production":
+                print(
+                    f"\n{'='*80}\n"
+                    f"FATAL ERROR: SESSION_SECRET_KEY must be changed for {environment} environment.\n"
+                    f"Please set SCHEMASENSE_SESSION_SECRET_KEY to a strong random value.\n"
+                    f"{'='*80}\n",
+                    file=sys.stderr
+                )
+                sys.exit(1)
+
+        return v
 
 
 #load settings from env or default
