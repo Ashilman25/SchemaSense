@@ -201,7 +201,7 @@ def apply_er_edits(request: EREditRequest) -> EREditResponse:
                 errors.append(f"Action '{action.type}' failed: {str(e)}")
 
         if errors:
-            return EREditResponse(success=False, errors=errors)
+            return EREditResponse(success = False, errors = errors)
 
         success, error_msg = execute_ddl_statements(conn, ddl_statements)
 
@@ -460,33 +460,80 @@ def _extract_action_params(action: ERAction) -> Dict[str, Any]:
 
 @router.post('/ddl-edit')
 def apply_ddl_edit(request: DDLEditRequest) -> DDLEditResponse:
+    conn = None
+    
     try:
-
-        new_schema_model = CanonicalSchemaModel.from_ddl(request.ddl)
-        set_cached_schema(new_schema_model)
-
+        try:
+            CanonicalSchemaModel.from_ddl(request.ddl)
+            
+        except SchemaValidationError as e:
+            return DDLEditResponse(
+                success = False,
+                schema = None,
+                ddl = None,
+                error = "Schema validation error",
+                details = str(e)
+            )
+            
+        except Exception as e:
+            return DDLEditResponse(
+                success = False,
+                schema = None,
+                ddl = None,
+                error = "DDL parsing failed",
+                details = str(e)
+            )
+            
+        conn = get_connection()
+        success, error_msg = execute_ddl_text(conn, request.ddl)
+        
+        if not success:
+            return DDLEditResponse(
+                success = False,
+                schema = None,
+                ddl = None,
+                error = "Database execution failed",
+                details = error_msg
+            )
+            
+        refreshed_schema = refresh_schema(conn)
+        db_config = get_database_config()
+        
+        if db_config and db_config.dbname.startswith("schemasense_user_"):
+            update_db_activity(db_config.dbname)
+            
         return DDLEditResponse(
             success = True,
-            schema = new_schema_model.to_dict_for_api(),
-            ddl = new_schema_model.to_ddl(),
+            schema = refreshed_schema.to_dict_for_api(),
+            ddl = refreshed_schema.to_ddl(),
             error = None,
             details = None
         )
-
-    except SchemaValidationError as e:
+    
+    
+    
+    except RuntimeError as e:
         return DDLEditResponse(
             success = False,
             schema = None,
             ddl = None,
-            error = "Schema validation error",
+            error = "Database connection unavailable",
             details = str(e)
         )
-
+    
     except Exception as e:
+        logger.error(f"Failed to apply DDL edits: {str(e)}", exc_info = True)
         return DDLEditResponse(
             success = False,
             schema = None,
             ddl = None,
-            error = "DDL parsing failed",
+            error = "Unexpected error",
             details = str(e)
         )
+    
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
