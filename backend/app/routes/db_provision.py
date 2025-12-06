@@ -1,6 +1,6 @@
 import psycopg2
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response, Header, Depends
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
@@ -13,6 +13,39 @@ from app.utils import audit_log
 
 logger = get_secure_logger(__name__)
 router = APIRouter(prefix = "/api/db", tags=["provisioning"])
+
+
+def verify_admin_key(x_admin_key: Optional[str] = Header(None)):
+    """
+    Dependency to verify admin API key for protected endpoints.
+    Checks the X-Admin-Key header against the configured admin API key.
+    """
+    settings = get_settings()
+
+    if not x_admin_key:
+        logger.warning("Admin endpoint access attempted without API key")
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "success": False,
+                "error": "unauthorized",
+                "message": "Admin API key required. Provide X-Admin-Key header."
+            }
+        )
+
+    if x_admin_key != settings.admin_api_key:
+        logger.warning("Admin endpoint access attempted with invalid API key",
+                      provided_key_prefix=x_admin_key[:8] if x_admin_key else None)
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "success": False,
+                "error": "forbidden",
+                "message": "Invalid admin API key"
+            }
+        )
+
+    return True
 
 
 class ProvisionRequest(BaseModel):
@@ -322,6 +355,72 @@ async def deprovision_db(request: Request, body: DeprovisionRequest):
     finally:
         if conn:
             conn.close()
+
+
+@router.get("/admin/active-dbs")
+async def list_active_dbs(authorized: bool = Depends(verify_admin_key)):
+    settings = get_settings()
+    admin_dsn = settings.managed_pg_admin_dsn
+    
+    conn = None
+    
+    try:
+        conn = psycopg2.connect(admin_dsn)
+        
+        with conn.cursor() as cur:
+            cur.execute("""
+                        SELECT id, session_id, db_name, db_role, created_at, last_used_at, mode, status
+                        FROM provisioned_dbs
+                        WHERE status = 'active'
+                        ORDER BY last_used_at DESC
+                        """)
+            rows = cur.fetchall()
+            active_dbs = []
+            
+            for row in rows:
+                active_dbs.append({
+                    "id" : row[0],
+                    "session_id" : row[1],
+                    "db_name" : row[2],
+                    "db_role" : row[3],
+                    "created_at" : row[4].isoformat() if row[4] else None,
+                    "last_used_at" : row[5].isoformat() if row[5] else None,
+                    "mode" : row[6],
+                    "status" : row[7]
+                })
+                
+            #also get counts
+            cur.execute("""
+                        SELECT COUNT(*) as total_active, COUNT(DISTINCT session_id) as unique_sessions
+                        FROM provisioned_dbs
+                        WHERE status = 'active'
+                        """)
+            stats = cur.fetchone()
+            
+            return {
+                "success" : True,
+                "databases" : active_dbs,
+                "stats" : {
+                    "total_active" : stats[0],
+                    "unique_sessions" : stats[1],
+                    "max_per_session" : settings.provision_max_dbs_per_session,
+                    "global_max" : settings.provision_global_max_dbs
+                }
+            }
     
     
+    except Exception as e:
+        logger.error("Failed to list active DBs", error = str(e))
+        raise HTTPException(
+            status_code = 500,
+            detail = {
+                "success" : False,
+                "error" : "list_failed",
+                "message" : f"Failed to list active databases: {str(e)}"
+            }
+        )
     
+    
+    finally:
+        if conn:
+            conn.close()
