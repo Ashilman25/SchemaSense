@@ -61,7 +61,7 @@ def _provision_managed_database(session_id: Optional[str], load_sample: bool) ->
                         PASSWORD %s
                         NOSUPERUSER
                         NOCREATEDB
-                        NOCREATEROLE
+                        CREATEROLE
                         NOREPLICATION
                         CONNECTION LIMIT {settings.provision_connection_limit_per_role}
                         """, (password,))
@@ -207,7 +207,7 @@ def update_db_activity(db_name: str) -> None:
                         UPDATE provisioned_dbs
                         SET last_used_at = CURRENT_TIMESTAMP
                         WHERE db_name = %s AND status = 'active'
-                        """, (db_name))
+                        """, (db_name,))
 
             if cur.rowcount > 0:
                 logger.debug("Updated activity timestamp", db_name = db_name)
