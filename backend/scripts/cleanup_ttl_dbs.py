@@ -41,7 +41,7 @@ def cleanup_stale_databases(dry_run: bool = False, ttl_days: int = 14):
                         SELECT id, session_id, db_name, db_role, last_used_at
                         FROM provisioned_dbs
                         WHERE status = 'active' AND last_used_at < %s
-                        ORDER BY last_used_at DESC
+                        ORDER BY last_used_at ASC
                         """, (cutoff_time,))
             stale_dbs = cur.fetchall()
             
@@ -133,3 +133,45 @@ def cleanup_stale_databases(dry_run: bool = False, ttl_days: int = 14):
     finally:
         if conn:
             conn.close()
+
+
+
+def main():
+    parser = argparse.ArgumentParser(description = "Clean up provisioned databases that have exceeded their TTL")
+    parser.add_argument(
+        "--dry-run",
+        action = "store_true",
+        help = "Show what would be deleted without actually deleting"
+    )
+    parser.add_argument(
+        "--ttl-days",
+        type = int,
+        default = None,
+        help = "Override TTL days from environment (default: from TTL_CLEANUP_DAYS env or 7)"
+    )
+
+    args = parser.parse_args()
+
+    # Get TTL from args, environment, or default
+    ttl_days = args.ttl_days
+    if ttl_days is None:
+        ttl_days = int(os.environ.get("TTL_CLEANUP_DAYS", "14"))
+
+    try:
+        cleaned = cleanup_stale_databases(dry_run = args.dry_run, ttl_days = ttl_days)
+
+        if args.dry_run:
+            print(f"\n[DRY RUN] Would clean up {cleaned} stale database(s)")
+            
+        else:
+            print(f"\nSuccessfully cleaned up {cleaned} stale database(s)")
+
+        return 0
+
+    except Exception as e:
+        print(f"\nError during cleanup: {e}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
