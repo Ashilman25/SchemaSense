@@ -2,9 +2,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any, Dict
 from app.models.schema_model import CanonicalSchemaModel, Column, SchemaValidationError
-from app.schema.cache import get_or_refresh_schema, set_cached_schema
+from app.schema.cache import get_or_refresh_schema, refresh_schema
 from app.db import get_connection, get_database_config
 from app.db_provisioner import update_db_activity
+from app.schema.ddl_executor import generate_ddl_from_action, execute_ddl_statements, execute_ddl_text
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/schema", tags=["schema"])
 
@@ -179,34 +183,54 @@ def apply_er_edits(request: EREditRequest) -> EREditResponse:
         conn = get_connection()
         schema_model = get_or_refresh_schema(conn)
 
+        ddl_statements = []
         errors = []
+
         for action in request.actions:
             try:
                 _apply_single_action(schema_model, action)
-                
+
+                action_params = _extract_action_params(action)
+                ddl = generate_ddl_from_action(action.type, action_params, schema_model)
+                ddl_statements.append(ddl)
+
             except SchemaValidationError as e:
                 errors.append(f"Action '{action.type}': {str(e)}")
-                
+
             except Exception as e:
                 errors.append(f"Action '{action.type}' failed: {str(e)}")
 
-
         if errors:
-            return EREditResponse(success = False, errors = errors)
+            return EREditResponse(success=False, errors=errors)
 
-        set_cached_schema(schema_model)
+        success, error_msg = execute_ddl_statements(conn, ddl_statements)
+
+        if not success:
+            return EREditResponse(
+                success = False,
+                errors = [f"Database execution failed: {error_msg}"]
+            )
+
+        refreshed_schema = refresh_schema(conn)
+        db_config = get_database_config()
+        
+        if db_config and db_config.dbname.startswith("schemasense_user_"):
+            update_db_activity(db_config.dbname)
+
+
         return EREditResponse(
             success = True,
-            schema = schema_model.to_dict_for_api(),
-            ddl = schema_model.to_ddl(),
+            schema = refreshed_schema.to_dict_for_api(),
+            ddl = refreshed_schema.to_ddl(),
             errors = None
-        ) 
+        )
 
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=f"Database connection unavailable: {str(e)}")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to apply ER edits: {str(e)}")
+        logger.error(f"Failed to apply ER edits: {str(e)}", exc_info = True)
+        raise HTTPException(status_code = 500, detail = f"Failed to apply ER edits: {str(e)}")
 
     finally:
         if conn is not None:
@@ -338,6 +362,100 @@ def _apply_single_action(schema_model: CanonicalSchemaModel, action: ERAction) -
 
     else:
         raise ValueError(f"Unknown action type: {action_type}")
+
+
+def _extract_action_params(action: ERAction) -> Dict[str, Any]:
+    params = {}
+    
+    if action.type == "add_table":
+        params["name"] = action.name
+        params["schema"] = action.schema or "public"
+        params["columns"] = []  
+
+    elif action.type == "rename_table":
+        params["old_name"] = action.old_name
+        params["new_name"] = action.new_name
+        params["schema"] = action.schema or "public"
+
+    elif action.type == "drop_table":
+        params["name"] = action.name
+        params["schema"] = action.schema or "public"
+        params["force"] = action.force or False
+
+    elif action.type == "add_column":
+        table_parts = action.table.split(".")
+        
+        if len(table_parts) == 2:
+            params["schema"] = table_parts[0]
+            params["table_name"] = table_parts[1]
+            
+        else:
+            params["schema"] = action.schema or "public"
+            params["table_name"] = action.table
+
+        params["column"] = action.column
+
+    elif action.type == "rename_column":
+        table_parts = action.table.split(".")
+        
+        if len(table_parts) == 2:
+            params["schema"] = table_parts[0]
+            params["table_name"] = table_parts[1]
+            
+        else:
+            params["schema"] = action.schema or "public"
+            params["table_name"] = action.table
+
+        params["old_col"] = action.old_col
+        params["new_col"] = action.new_col
+
+    elif action.type == "drop_column":
+        table_parts = action.table.split(".")
+        
+        if len(table_parts) == 2:
+            params["schema"] = table_parts[0]
+            params["table_name"] = table_parts[1]
+            
+        else:
+            params["schema"] = action.schema or "public"
+            params["table_name"] = action.table
+
+        params["column_name"] = action.column_name
+        params["force"] = action.force or False
+
+    elif action.type == "add_relationship":
+        from_parts = action.from_table.split(".")
+        to_parts = action.to_table.split(".")
+
+        params["from_schema"] = from_parts[0] if len(from_parts) == 2 else (action.from_schema or "public")
+        params["from_table"] = from_parts[-1]
+        params["from_column"] = action.from_column
+
+        params["to_schema"] = to_parts[0] if len(to_parts) == 2 else (action.to_schema or "public")
+        params["to_table"] = to_parts[-1]
+        params["to_column"] = action.to_column
+
+    elif action.type == "remove_relationship":
+        from_parts = action.from_table.split(".")
+
+        params["from_schema"] = from_parts[0] if len(from_parts) == 2 else (action.from_schema or "public")
+        params["from_table"] = from_parts[-1]
+        params["from_column"] = action.from_column
+
+    return params
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 @router.post('/ddl-edit')
