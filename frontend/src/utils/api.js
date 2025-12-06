@@ -52,6 +52,14 @@ export const dbConfigAPI = {
     });
   },
 
+  //check if session has active provisioned DB
+  //returns: {success:, has_provisioned_db:, db_info: {host, port, dbname, user}}
+  getSessionConfig: async () => {
+    return apiRequest('/api/config/db/session', {
+      method: 'GET',
+    });
+  },
+
   //disconnect from database
   //returns: {success:, message:}
   disconnect: async () => {
