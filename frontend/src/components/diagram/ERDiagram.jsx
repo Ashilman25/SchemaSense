@@ -61,17 +61,10 @@ const ERDiagram = ({schema, onAskAboutTable, onSchemaUpdate, isDbConnected}) => 
                 {
                     type: 'add_table',
                     name: tableData.tableName,
-                    schema: tableData.schema
+                    schema: tableData.schema,
+                    columns: tableData.columns
                 }
             ];
-
-            for (const col of tableData.columns) {
-                actions.push({
-                    type: 'add_column',
-                    table: `${tableData.schema}.${tableData.tableName}`,
-                    column: col
-                });
-            }
 
             const response = await schemaAPI.applyEREdits(actions);
 
@@ -397,4 +390,3 @@ const ERDiagram = ({schema, onAskAboutTable, onSchemaUpdate, isDbConnected}) => 
 };
 
 export default ERDiagram;
-
