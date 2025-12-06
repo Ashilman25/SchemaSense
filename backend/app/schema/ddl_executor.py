@@ -80,6 +80,8 @@ def _generate_create_table(params: Dict[str, Any]) -> str:
     return f'CREATE TABLE "{schema}"."{name}" (\n    {columns_sql}\n)'
 
 
+
+#table editing
 def _generate_rename_table(params: Dict[str, Any]) -> str:
     old_name = params.get("old_name")
     new_name = params.get("new_name")
@@ -101,3 +103,50 @@ def _generate_drop_table(params: Dict[str, Any]) -> str:
 
     cascade = " CASCADE" if force else ""
     return f'DROP TABLE "{schema}"."{name}"{cascade}'
+    
+    
+#column editing
+def _generate_add_column(params: Dict[str, Any]) -> str:
+    table_name = params.get("table_name")
+    schema = params.get("schema", "public")
+    column = params.get("column")
+
+    if not table_name or not column:
+        raise ValueError("table_name and column are required for add_column action")
+
+    col_name = column.get("name")
+    col_type = column.get("type", "text")
+    nullable = column.get("nullable", True)
+
+    parts = [f'"{col_name}"', col_type]
+
+    if not nullable:
+        parts.append("NOT NULL")
+
+    column_def = " ".join(parts)
+    return f'ALTER TABLE "{schema}"."{table_name}" ADD COLUMN {column_def}'
+
+
+def _generate_rename_column(params: Dict[str, Any]) -> str:
+    table_name = params.get("table_name")
+    schema = params.get("schema", "public")
+    old_col = params.get("old_col")
+    new_col = params.get("new_col")
+
+    if not table_name or not old_col or not new_col:
+        raise ValueError("table_name, old_col, and new_col are required for rename_column action")
+
+    return f'ALTER TABLE "{schema}"."{table_name}" RENAME COLUMN "{old_col}" TO "{new_col}"'
+
+
+def _generate_drop_column(params: Dict[str, Any]) -> str:
+    table_name = params.get("table_name")
+    schema = params.get("schema", "public")
+    column_name = params.get("column_name")
+    force = params.get("force", False)
+
+    if not table_name or not column_name:
+        raise ValueError("table_name and column_name are required for drop_column action")
+
+    cascade = " CASCADE" if force else ""
+    return f'ALTER TABLE "{schema}"."{table_name}" DROP COLUMN "{column_name}"{cascade}'
