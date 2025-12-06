@@ -37,7 +37,10 @@ class Settings(BaseSettings):
 
     ephemeral_ttl_minutes: int = 60  #maybe for future
 
-    enable_sample_data: bool = True  # Allow loading sample sales schema
+
+    ttl_cleanup_days: int = 7  # Delete databases inactive for more than this many days
+    admin_api_key: str = "dev-admin-key-change-in-production"
+    enable_sample_data: bool = True  
 
     model_config = SettingsConfigDict(
         env_file = ".env",
@@ -92,6 +95,25 @@ class Settings(BaseSettings):
                     f"\n{'='*80}\n"
                     f"FATAL ERROR: SESSION_SECRET_KEY must be changed for {environment} environment.\n"
                     f"Please set SCHEMASENSE_SESSION_SECRET_KEY to a strong random value.\n"
+                    f"{'='*80}\n",
+                    file=sys.stderr
+                )
+                sys.exit(1)
+
+        return v
+
+    @field_validator("admin_api_key")
+    @classmethod
+    def validate_admin_api_key_in_production(cls, v: str, info) -> str:
+        environment = info.data.get("environment", "development")
+
+        if environment in ("production", "prod", "demo"):
+            if v == "dev-admin-key-change-in-production":
+                print(
+                    f"\n{'='*80}\n"
+                    f"FATAL ERROR: ADMIN_API_KEY must be changed for {environment} environment.\n"
+                    f"Please set SCHEMASENSE_ADMIN_API_KEY to a strong random value.\n"
+                    f"Generate one with: openssl rand -hex 32\n"
                     f"{'='*80}\n",
                     file=sys.stderr
                 )
