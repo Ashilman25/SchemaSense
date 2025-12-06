@@ -192,5 +192,33 @@ def _load_sample_data(db_config: DatabaseConfig) -> None:
 
 
 
+def update_db_activity(db_name: str) -> None:
+    settings = get_settings()
+    admin_dsn = settings.managed_pg_admin_dsn
+
+    conn = None
+    
+    try:
+        conn = psycopg2.connect(admin_dsn)
+        conn.autocommit = True
+
+        with conn.cursor() as cur:
+            cur.execute("""
+                        UPDATE provisioned_dbs
+                        SET last_used_at = CURRENT_TIMESTAMP
+                        WHERE db_name = %s AND status = 'active'
+                        """, (db_name))
+
+            if cur.rowcount > 0:
+                logger.debug("Updated activity timestamp", db_name = db_name)
+
+    except Exception as e:
+        logger.warning("Failed to update activity timestamp", db_name = db_name, error = str(e))
+
+    finally:
+        if conn:
+            conn.close()
+
+
 def deprovision_database(identifier: str) -> None:
     raise NotImplementedError("Database deprovisioning not yet implemented")
