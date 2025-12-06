@@ -52,6 +52,29 @@ export const dbConfigAPI = {
     });
   },
 
+  //disconnect from database
+  //returns: {success:, message:}
+  disconnect: async () => {
+    return apiRequest('/api/config/db', {
+      method: 'DELETE',
+    });
+  },
+
+  //update db credentials (actually changes them in PostgreSQL)
+  //returns: {success:, message:}
+  updateCredentials: async (config) => {
+    return apiRequest('/api/config/db', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        host: config.host,
+        port: parseInt(config.port),
+        dbname: config.dbname,
+        user: config.user,
+        password: config.password,
+      }),
+    });
+  },
+
   //provision a managed database
   //on success returns: {success: true, mode: "managed", connection: {host, port, dbname, user, password}}
   //on fail returns: {success: false, error: "quota_exceeded"|"provision_failed", message: "..."}
