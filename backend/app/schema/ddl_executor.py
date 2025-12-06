@@ -78,3 +78,26 @@ def _generate_create_table(params: Dict[str, Any]) -> str:
         
     columns_sql = ",\n    ".join(col_defs)
     return f'CREATE TABLE "{schema}"."{name}" (\n    {columns_sql}\n)'
+
+
+def _generate_rename_table(params: Dict[str, Any]) -> str:
+    old_name = params.get("old_name")
+    new_name = params.get("new_name")
+    schema = params.get("schema", "public")
+    
+    if not old_name or not new_name:
+        raise ValueError("Both old_name and new_name are required for rename_table action")
+    
+    return f'ALTER TABLE "{schema}"."{old_name}" RENAME TO "{new_name}"'
+
+
+def _generate_drop_table(params: Dict[str, Any]) -> str:
+    name = params.get("name")
+    schema = params.get("schema", "public")
+    force = params.get("force", False)
+
+    if not name:
+        raise ValueError("Table name is required for drop_table action")
+
+    cascade = " CASCADE" if force else ""
+    return f'DROP TABLE "{schema}"."{name}"{cascade}'
