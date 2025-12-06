@@ -21,6 +21,7 @@ const HistoryList = forwardRef(({onHistoryItemClick, isDbConnected}, ref) => {
   const [history, setHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [deletingIds, setDeletingIds] = useState(new Set());
 
   const fetchHistory = async () => {
     if (!isDbConnected) {
@@ -43,6 +44,7 @@ const HistoryList = forwardRef(({onHistoryItemClick, isDbConnected}, ref) => {
     } finally {
       setIsLoading(false);
     }
+    
   };
 
   useEffect(() => {
@@ -56,6 +58,35 @@ const HistoryList = forwardRef(({onHistoryItemClick, isDbConnected}, ref) => {
   const handleItemClick = (item) => {
     if (onHistoryItemClick) {
       onHistoryItemClick(item);
+    }
+  };
+
+  const handleDelete = async (e, itemId) => {
+    e.stopPropagation(); 
+    setDeletingIds(prev => new Set(prev).add(itemId));
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await historyAPI.deleteHistory(itemId);
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      setHistory(prev => prev.filter(item => item.id !== itemId));
+
+      setDeletingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(itemId);
+        return newSet;
+      });
+
+    } catch (err) {
+      console.error("Failed to delete history item: ", err);
+      setDeletingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(itemId);
+        return newSet;
+      });
+
+      setError("Failed to delete history item");
     }
   };
 
@@ -135,39 +166,67 @@ const HistoryList = forwardRef(({onHistoryItemClick, isDbConnected}, ref) => {
 
   return (
     <div className = "flex-1 overflow-y-auto space-y-2">
-      {history.map((item) => (
-        <div
-          key = {item.id}
-          onClick = {() => handleItemClick(item)}
-          className = "p-3 bg-gray-50 dark:bg-slate-700/50 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg border border-gray-200 dark:border-slate-600 cursor-pointer transition-colors group"
-        >
-          <div className = "flex items-start gap-2">
-            <StatusIcon status = {item.status} />
+      {history.map((item) => {
+        const isDeleting = deletingIds.has(item.id);
 
-            <div className = "flex-1 min-w-0">
-              <p className = "text-sm text-gray-700 dark:text-gray-300 line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                {item.question}
-              </p>
+        return (
+          <div
+            key = {item.id}
+            onClick = {() => handleItemClick(item)}
+            className = {`p-3 bg-gray-50 dark:bg-slate-700/50 rounded-lg border border-gray-200 dark:border-slate-600 cursor-pointer group relative transition-all duration-300 ${
+              isDeleting
+                ? 'opacity-0 scale-95 -translate-x-full'
+                : 'opacity-100 scale-100 translate-x-0'
+            }`}
+          >
+            <div className = "flex items-start gap-2">
+              <StatusIcon status = {item.status} />
 
-              <div className = "flex items-center gap-2 mt-1">
-                <p className = "text-xs text-gray-500 dark:text-gray-400">
-                  {formatRelativeTime(item.timestamp)}
+              <div className = "flex-1 min-w-0">
+                <p className = "text-sm text-gray-700 dark:text-gray-300 line-clamp-2">
+                  {item.question}
                 </p>
 
-                {item.execution_duration_ms && (
-                  <>
-                    <span className = "text-xs text-gray-400">•</span>
-                    <p className = "text-xs text-gray-500 dark:text-gray-400">
-                      {item.execution_duration_ms}ms
-                    </p>
-                  </>
-                )}
+                <div className = "flex items-center gap-2 mt-1">
+                  <p className = "text-xs text-gray-500 dark:text-gray-400">
+                    {formatRelativeTime(item.timestamp)}
+                  </p>
+
+                  {item.execution_duration_ms && (
+                    <>
+                      <span className = "text-xs text-gray-400">•</span>
+                      <p className = "text-xs text-gray-500 dark:text-gray-400">
+                        {item.execution_duration_ms}ms
+                      </p>
+                    </>
+                  )}
+                </div>
               </div>
+
+              <button
+                onClick = {(e) => handleDelete(e, item.id)}
+                className = "opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded cursor-pointer"
+                aria-label = "Delete history item"
+              >
+                <svg
+                  className = "w-4 h-4 text-gray-400 hover:text-white dark:hover:text-gray-100 transition-colors"
+                  fill = "none"
+                  stroke = "currentColor"
+                  viewBox = "0 0 24 24"
+                >
+                  <path
+                    strokeLinecap = "round"
+                    strokeLinejoin = "round"
+                    strokeWidth = {2}
+                    d = "M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
             </div>
+
           </div>
-          
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 });

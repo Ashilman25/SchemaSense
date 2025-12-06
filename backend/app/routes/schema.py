@@ -3,7 +3,8 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Any, Dict
 from app.models.schema_model import CanonicalSchemaModel, Column, SchemaValidationError
 from app.schema.cache import get_or_refresh_schema, set_cached_schema
-from app.db import get_connection
+from app.db import get_connection, get_database_config
+from app.db_provisioner import update_db_activity
 
 router = APIRouter(prefix="/api/schema", tags=["schema"])
 
@@ -59,9 +60,14 @@ def get_schema():
     conn = None
     try:
         conn = get_connection()
-        
+
         schema_model = get_or_refresh_schema(conn)
         api_payload = schema_model.to_dict_for_api()
+
+        # Update activity tracking for managed DBs
+        db_config = get_database_config()
+        if db_config and db_config.dbname.startswith("schemasense_user_"):
+            update_db_activity(db_config.dbname)
 
         return api_payload
 
@@ -107,6 +113,11 @@ def get_sample_rows(table: str, limit: int = 10):
 
         columns = [desc[0] for desc in cursor.description]
         row_data = [list(row) for row in rows]
+
+        # Update activity tracking for managed DBs
+        db_config = get_database_config()
+        if db_config and db_config.dbname.startswith("schemasense_user_"):
+            update_db_activity(db_config.dbname)
 
         return {
             "table": table,

@@ -1,4 +1,5 @@
 from typing import Optional
+from urllib.parse import quote_plus
 from pydantic import BaseModel
 import psycopg2
 
@@ -27,7 +28,9 @@ def get_database_config() -> Optional[DatabaseConfig]:
 
 #build postgres dsn
 def build_dsn(config: DatabaseConfig) -> str:
-    return f"postgresql://{config.user}:{config.password}@{config.host}:{config.port}/{config.dbname}"
+    encoded_user = quote_plus(config.user)
+    encoded_password = quote_plus(config.password)
+    return f"postgresql://{encoded_user}:{encoded_password}@{config.host}:{config.port}/{config.dbname}"
 
 
 #open and return a real db connection

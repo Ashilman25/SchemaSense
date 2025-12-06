@@ -2,7 +2,8 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from app.schema.cache import get_schema
 from app.nl_to_sql.validator import validate_and_normalize_sql, SQLValidationError
-from app.db import get_connection
+from app.db import get_connection, get_database_config
+from app.db_provisioner import update_db_activity
 
 
 router = APIRouter(prefix="/api/sql", tags=["sql"])
@@ -84,6 +85,11 @@ def execute_sql(request: SQLRequest):
         rows = cursor.fetchall()
         row_count = len(rows)
         truncated = row_count >= 500
+
+        # Update activity tracking for managed DBs
+        db_config = get_database_config()
+        if db_config and db_config.dbname.startswith("schemasense_user_"):
+            update_db_activity(db_config.dbname)
 
         return {
             "columns": columns,
@@ -190,6 +196,11 @@ def plan_sql(request: SQLRequest):
             return node_id
 
         traverse_plan(root_plan)
+
+        # Update activity tracking for managed DBs
+        db_config = get_database_config()
+        if db_config and db_config.dbname.startswith("schemasense_user_"):
+            update_db_activity(db_config.dbname)
 
         return {
             "nodes": nodes,
