@@ -19,6 +19,7 @@ class ERAction(BaseModel):
     name: Optional[str] = None
     schema: Optional[str] = "public"
     table: Optional[str] = None
+    columns: Optional[List[Dict[str, Any]]] = None
     column: Optional[Dict[str, Any]] = None
     old_name: Optional[str] = None
     new_name: Optional[str] = None
@@ -245,24 +246,37 @@ def _apply_single_action(schema_model: CanonicalSchemaModel, action: ERAction) -
     action_type = action.type
 
     if action_type == "add_table":
+        columns = None
+        if action.columns:
+            columns = [
+                Column(
+                    name = col_data.get("name"),
+                    type = col_data.get("type"),
+                    is_pk = col_data.get("is_pk", False),
+                    is_fk = col_data.get("is_fk", False),
+                    nullable = col_data.get("nullable", True)
+                )
+                for col_data in action.columns
+            ]
+
         schema_model.add_table(
-            name=action.name,
-            schema=action.schema or "public",
-            columns=None
+            name = action.name,
+            schema = action.schema or "public",
+            columns = columns
         )
 
     elif action_type == "rename_table":
         schema_model.rename_table(
-            old_name=action.old_name,
-            new_name=action.new_name,
-            schema=action.schema or "public"
+            old_name = action.old_name,
+            new_name = action.new_name,
+            schema = action.schema or "public"
         )
 
     elif action_type == "drop_table":
         schema_model.drop_table(
-            name=action.name,
-            schema=action.schema or "public",
-            force=action.force or False
+            name = action.name,
+            schema = action.schema or "public",
+            force = action.force or False
         )
 
     elif action_type == "add_column":
@@ -370,7 +384,7 @@ def _extract_action_params(action: ERAction) -> Dict[str, Any]:
     if action.type == "add_table":
         params["name"] = action.name
         params["schema"] = action.schema or "public"
-        params["columns"] = []  
+        params["columns"] = action.columns or []  
 
     elif action.type == "rename_table":
         params["old_name"] = action.old_name
