@@ -81,7 +81,7 @@ def _generate_create_table(params: Dict[str, Any]) -> str:
 
 
 
-#table editing
+#TABLE EDITING
 def _generate_rename_table(params: Dict[str, Any]) -> str:
     old_name = params.get("old_name")
     new_name = params.get("new_name")
@@ -105,7 +105,8 @@ def _generate_drop_table(params: Dict[str, Any]) -> str:
     return f'DROP TABLE "{schema}"."{name}"{cascade}'
     
     
-#column editing
+
+#COLUMN EDITING
 def _generate_add_column(params: Dict[str, Any]) -> str:
     table_name = params.get("table_name")
     schema = params.get("schema", "public")
@@ -150,3 +151,39 @@ def _generate_drop_column(params: Dict[str, Any]) -> str:
 
     cascade = " CASCADE" if force else ""
     return f'ALTER TABLE "{schema}"."{table_name}" DROP COLUMN "{column_name}"{cascade}'
+    
+    
+    
+#FOREIGN KEYS
+def _generate_add_foreign_key(params: Dict[str, Any]) -> str:
+    from_table = params.get("from_table")
+    from_schema = params.get("from_schema", "public")
+    from_column = params.get("from_column")
+    to_table = params.get("to_table")
+    to_schema = params.get("to_schema", "public")
+    to_column = params.get("to_column")
+
+    if not all([from_table, from_column, to_table, to_column]):
+        raise ValueError("from_table, from_column, to_table, and to_column are required for add_relationship action")
+
+    constraint_name = f"{from_table}_{from_column}_fkey"
+
+    return (
+        f'ALTER TABLE "{from_schema}"."{from_table}" '
+        f'ADD CONSTRAINT "{constraint_name}" '
+        f'FOREIGN KEY ("{from_column}") '
+        f'REFERENCES "{to_schema}"."{to_table}" ("{to_column}")'
+    )
+
+
+def _generate_drop_foreign_key(params: Dict[str, Any]) -> str:
+    from_table = params.get("from_table")
+    from_schema = params.get("from_schema", "public")
+    from_column = params.get("from_column")
+
+    if not all([from_table, from_column]):
+        raise ValueError("from_table and from_column are required for remove_relationship action")
+
+    constraint_name = f"{from_table}_{from_column}_fkey"
+
+    return f'ALTER TABLE "{from_schema}"."{from_table}" DROP CONSTRAINT "{constraint_name}"'
