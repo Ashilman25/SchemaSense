@@ -49,7 +49,7 @@ def _generate_create_table(params: Dict[str, Any]) -> str:
         raise ValueError("Table name is required for add_table action")
     
     if not columns:
-        return f'CREATE TABLE "{schema}".{name}" ()'
+        return f'CREATE TABLE "{schema}"."{name}" ()'
     
     col_defs = []
     pk_columns = []
@@ -187,3 +187,92 @@ def _generate_drop_foreign_key(params: Dict[str, Any]) -> str:
     constraint_name = f"{from_table}_{from_column}_fkey"
 
     return f'ALTER TABLE "{from_schema}"."{from_table}" DROP CONSTRAINT "{constraint_name}"'
+
+
+
+#DDL 
+def execute_ddl_statements(conn: PgConnection, ddl_statements: List[str]) -> Tuple[bool, Optional[str]]:
+    if not ddl_statements:
+        return True, None
+    
+    curr = None
+    
+    try:
+        curr = conn.cursor()
+        
+        for ddl in ddl_statements:
+            ddl_type = _extract_ddl_type(ddl)
+            logger.info(f"Executing DDL: {ddl_type}")
+            logger.debug(f"Full DDL statement: {ddl}")
+            
+            curr.execute(ddl)
+            
+        conn.commit()
+        logger.info(f"Successfully executed {len(ddl_statements)} DDL statement(s)")
+        return True, None
+
+    
+    except Exception as e:
+        conn.rollback()
+        error_msg = f"DDL execution failed: {str(e)}"
+        logger.error(error_msg, exc_info = True)
+        
+        return False, error_msg
+    
+    finally:
+        if curr:
+            curr.close()
+            
+            
+            
+def execute_ddl_text(conn: PgConnection, ddl_text: str) -> Tuple[bool, Optional[str]]:
+    if not ddl_text or not ddl_text.strip():
+        return True, None
+    
+    curr = None
+    
+    try:
+        curr = conn.cursor()
+        
+        ddl_type = _extract_ddl_type(ddl_text)
+        logger.info(f"Executing user DDL: {ddl_type}")
+        logger.debug(f"Full DDL text: {ddl_text}")
+        
+        curr.execute(ddl_text)
+        
+        conn.commit()
+        logger.info("Successfully executed user-provided DDL")
+        return True, None
+    
+    except Exception as e:
+        conn.rollback()
+        error_msg = f"DDL execution failed: {str(e)}"
+        logger.error(error_msg, exc_info = True)
+        
+        return False, error_msg
+    
+    finally:
+        if curr:
+            curr.close()
+            
+            
+            
+def _extract_ddl_type(ddl: str) -> str:
+    tokens = ddl.strip().split()
+    
+    if not tokens:
+        return "UNKNOWN"
+    
+    if tokens[0].upper() == "CREATE" and len(tokens) > 1:
+        return f"{tokens[0].upper()} {tokens[1].upper()}"
+
+    if tokens[0].upper() == "ALTER" and len(tokens) > 1:
+        if len(tokens) > 3:
+            return f"{tokens[0].upper()} {tokens[1].upper()} {tokens[3].upper()}"
+        
+        return f"{tokens[0].upper()} {tokens[1].upper()}"
+
+    if tokens[0].upper() == "DROP" and len(tokens) > 1:
+        return f"{tokens[0].upper()} {tokens[1].upper()}"
+
+    return tokens[0].upper()
