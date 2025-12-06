@@ -7,6 +7,7 @@ const TopNavBar = ({ onConnectionChange }) => {
     const {theme, toggleTheme} = useTheme();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
+    const [currentConnection, setCurrentConnection] = useState(null);
 
 
     useEffect(() => {
@@ -19,6 +20,13 @@ const TopNavBar = ({ onConnectionChange }) => {
             const connected = response.connected || false;
             setIsConnected(connected);
 
+            if (connected && response.connection) {
+                setCurrentConnection(response.connection);
+
+            } else {
+                setCurrentConnection(null);
+            }
+
             if (onConnectionChange) {
                 onConnectionChange(connected);
             }
@@ -26,14 +34,17 @@ const TopNavBar = ({ onConnectionChange }) => {
         } catch (error) {
             console.error('Failed to check connection status: ', error);
             setIsConnected(false);
+            setCurrentConnection(null);
             if (onConnectionChange) {
                 onConnectionChange(false);
             }
         }
     };
 
-    const handleConnectionSuccess = () => {
+    const handleConnectionSuccess = async () => {
         setIsConnected(true);
+        await checkConnectionStatus();
+        
         if (onConnectionChange) {
             onConnectionChange(true);
         }
@@ -123,7 +134,12 @@ const TopNavBar = ({ onConnectionChange }) => {
             </div>
 
 
-            <DBConfigModal isOpen = {isModalOpen} onClose = {handleCloseModal} onConnectionSuccess = {handleConnectionSuccess}/>
+            <DBConfigModal
+                isOpen = {isModalOpen}
+                onClose = {handleCloseModal}
+                onConnectionSuccess = {handleConnectionSuccess}
+                currentConnection = {currentConnection}
+            />
         </nav>
     )
 
