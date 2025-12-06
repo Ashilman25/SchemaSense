@@ -167,3 +167,7 @@ build/
 
 _docs/
 infra/README.md
+
+test_admin_security.py
+test_cleanup_imports.py
+test_role_isolation.py
