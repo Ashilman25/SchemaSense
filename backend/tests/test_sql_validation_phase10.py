@@ -74,6 +74,16 @@ def test_alter_table_rename_is_allowed():
     assert warnings == []
 
 
+def test_alter_table_rename_column_is_allowed():
+    model = _sample_schema()
+    normalized, warnings = validate_and_normalize_sql(
+        "ALTER TABLE public.users RENAME COLUMN email TO primary_email",
+        model,
+    )
+    assert "RENAME" in normalized.upper()
+    assert warnings == []
+
+
 def test_drop_table_is_blocked():
     model = _sample_schema()
     with pytest.raises(SQLValidationError):

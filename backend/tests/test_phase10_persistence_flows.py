@@ -423,6 +423,24 @@ class TestEndToEndQueryability:
         assert data.get("error_type") is None
         assert data["rows"], "Select after insert should return at least one row"
 
+    def test_execute_response_includes_schema_after_ddl(self, client):
+        create_sql = """
+        CREATE TABLE public.phase10_exec_insert (
+            id serial PRIMARY KEY,
+            name text NOT NULL
+        )
+        """
+        create_response = client.post("/api/sql/execute", json={"sql": create_sql})
+        assert create_response.status_code == 200
+        payload = create_response.json()
+        assert payload.get("error_type") is None
+
+        # Schema should be returned and include the new table
+        schema = payload.get("schema")
+        assert schema is not None, "Schema should be refreshed and returned after DDL"
+        table_names = {(t["schema"], t["name"]) for t in schema.get("tables", [])}
+        assert ("public", "phase10_exec_insert") in table_names
+
 
 class TestNonPublicSchemaIntrospection:
     """
