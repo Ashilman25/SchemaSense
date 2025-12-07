@@ -19,7 +19,7 @@ class SQLRequest(BaseModel):
 def validate_sql(request: SQLRequest):
     try:
         schema_model = get_schema()
-        normalized_sql, warnings = validate_and_normalize_sql(request.sql, schema_model)
+        normalized_sql_list, warnings = validate_and_normalize_sql(request.sql, schema_model)
 
         #if warnings, invalid
         if warnings:
@@ -32,7 +32,7 @@ def validate_sql(request: SQLRequest):
         return {
             "valid": True,
             "errors": [],
-            "normalized_sql": normalized_sql,
+            "normalized_sql": ";\n".join(normalized_sql_list),
         }
 
     except SQLValidationError as e:
@@ -62,7 +62,7 @@ def execute_sql(request: SQLRequest):
 
     try:
         schema_model = get_schema()
-        normalized_sql, warnings = validate_and_normalize_sql(request.sql, schema_model)
+        normalized_sql_list, warnings = validate_and_normalize_sql(request.sql, schema_model)
 
         if warnings:
             return {
@@ -70,19 +70,54 @@ def execute_sql(request: SQLRequest):
                 "message": f"SQL validation failed: {'; '.join(warnings)}"
             }
 
-        is_select_like = normalized_sql.lstrip().upper().startswith(("SELECT", "WITH"))
-        if is_select_like and "LIMIT" not in normalized_sql.upper():
-            normalized_sql += " LIMIT 500"
-
         conn = get_connection()
         cursor = conn.cursor()
 
 
         cursor.execute("SET statement_timeout = '30s'")
-        cursor.execute(normalized_sql)
-
         schema_refreshed = None
-        if not is_select_like:
+        
+        last_result = {
+            "columns": [],
+            "rows": [],
+            "row_count": 0,
+            "truncated": False
+        }
+        schema_changed = False
+
+        for stmt in normalized_sql_list:
+            is_select_like = stmt.lstrip().upper().startswith(("SELECT", "WITH"))
+            stmt_to_run = stmt
+            
+            if is_select_like and "LIMIT" not in stmt.upper():
+                stmt_to_run = f"{stmt} LIMIT 500"
+
+            cursor.execute(stmt_to_run)
+
+            if is_select_like and cursor.description:
+                columns = [desc[0] for desc in cursor.description]
+                rows = cursor.fetchall()
+                row_count = len(rows)
+                truncated = row_count >= 500
+                last_result = {
+                    "columns": columns,
+                    "rows": rows,
+                    "row_count": row_count,
+                    "truncated": truncated
+                }
+                
+            else:
+                schema_changed = schema_changed or not is_select_like
+                row_count = cursor.rowcount if cursor.rowcount is not None and cursor.rowcount != -1 else 0
+                
+                last_result = {
+                    "columns": [],
+                    "rows": [],
+                    "row_count": row_count,
+                    "truncated": False
+                }
+
+        if schema_changed:
             conn.commit()
 
             try:
@@ -91,28 +126,16 @@ def execute_sql(request: SQLRequest):
             except Exception:
                 schema_refreshed = None
 
-        if cursor.description:
-            columns = [desc[0] for desc in cursor.description]
-            rows = cursor.fetchall()
-            row_count = len(rows)
-            truncated = is_select_like and row_count >= 500
-
-        else:
-            columns = []
-            rows = []
-            row_count = cursor.rowcount if cursor.rowcount is not None and cursor.rowcount != -1 else 0
-            truncated = False
-
         # Update activity tracking for managed DBs
         db_config = get_database_config()
         if db_config and db_config.dbname.startswith("schemasense_user_"):
             update_db_activity(db_config.dbname)
 
         return {
-            "columns": columns,
-            "rows": rows,
-            "row_count": row_count,
-            "truncated": truncated,
+            "columns": last_result["columns"],
+            "rows": last_result["rows"],
+            "row_count": last_result["row_count"],
+            "truncated": last_result["truncated"],
             "schema": schema_refreshed.to_dict_for_api() if schema_refreshed else None,
         }
 
@@ -148,13 +171,21 @@ def plan_sql(request: SQLRequest):
 
 
         schema_model = get_schema()
-        normalized_sql, warnings = validate_and_normalize_sql(request.sql, schema_model)
+        normalized_sql_list, warnings = validate_and_normalize_sql(request.sql, schema_model)
 
         if warnings:
             return {
                 "error_type" : "validation_error",
                 "message": f"SQL validation failed: {'; '.join(warnings)}"
             }
+
+        if len(normalized_sql_list) != 1:
+            return {
+                "error_type": "validation_error",
+                "message": "Query plans are only available for a single SELECT statement."
+            }
+
+        normalized_sql = normalized_sql_list[0]
 
         if not normalized_sql.lstrip().upper().startswith(("SELECT", "WITH")):
             return {
