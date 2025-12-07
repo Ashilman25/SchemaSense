@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/history", tags=["history"])
 
 class HistoryItemCreate(BaseModel):
     question: str = Field(..., description = "The english question asked")
-    sql: Optional[str] = Field(None, description = "The generated SQL query")
+    sql: Optional[Union[str, List[str]]] = Field(None, description = "The generated SQL query")
     status: str = Field(..., description = "Query status: success, error, or pending")
     execution_duration_ms: Optional[int] = Field(None, description = "Query execution time in milliseconds")
     
@@ -90,12 +90,19 @@ def add_history(item: HistoryItemCreate):
         
         conn = get_connection()
         cursor = conn.cursor()
+
+        sql_text = None
+        if isinstance(item.sql, list):
+            sql_text = ";\n".join(item.sql)
+            
+        else:
+            sql_text = item.sql
         
         cursor.execute("""
                        INSERT INTO schemasense.query_history (question, sql, status, execution_duration_ms)
                        VALUES (%s, %s, %s, %s)
                        RETURNING id
-                       """, (item.question, item.sql, item.status, item.execution_duration_ms))
+                       """, (item.question, sql_text, item.status, item.execution_duration_ms))
         
         history_id = cursor.fetchone()[0]
         conn.commit()

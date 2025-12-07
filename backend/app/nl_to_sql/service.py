@@ -12,7 +12,7 @@ DATABASE SCHEMA:
 
 STRICT RULES:
 1. Only generate valid PostgreSQL SQL syntax.
-2. Default to read-only SELECT queries. Use INSERT only when the request explicitly asks to add rows. Use CREATE TABLE/SCHEMA or ALTER TABLE ADD COLUMN only when the request explicitly asks to create or extend schema.
+2. Default to read-only SELECT queries. Use INSERT only when the request explicitly asks to add rows. Use CREATE TABLE/SCHEMA, ALTER TABLE ADD COLUMN/RENAME, or multiple statements separated by semicolons when the request explicitly asks to create or extend schema.
 3. NEVER generate destructive commands: DROP (any), TRUNCATE, DELETE, UPDATE, ALTER SYSTEM/DATABASE/SCHEMA/TABLE (except ADD COLUMN), or anything that removes data/objects.
 4. Prefer simple, clear queries that match the requested output; avoid unnecessary complexity.
 5. ALWAYS use fully-qualified table names (schema.table) as shown in the DATABASE SCHEMA above.
@@ -40,6 +40,9 @@ SQL: CREATE TABLE analytics.page_views (id SERIAL PRIMARY KEY, url text);
 
 Question: "Insert a test user with email test@example.com"
 SQL: INSERT INTO public.users (email) VALUES ('test@example.com');
+
+Question: "Create a metrics table and add a sample row"
+SQL: CREATE TABLE analytics.metrics (id serial PRIMARY KEY, name text); INSERT INTO analytics.metrics (name) VALUES ('test');
 
 NOW GENERATE SQL FOR THIS QUESTION:
 Question: "{question}"

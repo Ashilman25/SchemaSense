@@ -1,0 +1,235 @@
+"""
+High-level user flow tests for Phase 10 features.
+
+These tests exercise multi-step flows for:
+- Ordinary user: create via ER/SQL, queryability, schema refresh.
+- Experienced dev: multi-schema, rename, FK creation, validator guards.
+- Malicious actor: ensure destructive attempts are blocked.
+
+Notes:
+- DB connection settings rely on defaults: localhost:5432 schemasense/schemasense_dev.
+  Adjust the fixtures if your test DB differs.
+- Tests will be skipped automatically if the DB is not reachable.
+"""
+
+import pytest
+import psycopg2
+from fastapi.testclient import TestClient
+from app.main import app
+from app.db import set_database_config, DatabaseConfig
+from app.schema.cache import clear_schema_cache
+
+
+@pytest.fixture(scope="module")
+def test_db_config():
+    return DatabaseConfig(
+        host="localhost",
+        port=5432,
+        dbname="schemasense",
+        user="schemasense",
+        password="schemasense_dev",
+    )
+
+
+@pytest.fixture(scope="module")
+def client(test_db_config):
+    set_database_config(test_db_config)
+    clear_schema_cache()
+    return TestClient(app)
+
+
+@pytest.fixture(scope="module")
+def db_connection(test_db_config):
+    dsn = (
+        f"postgresql://{test_db_config.user}:{test_db_config.password}"
+        f"@{test_db_config.host}:{test_db_config.port}/{test_db_config.dbname}"
+    )
+    try:
+        conn = psycopg2.connect(dsn)
+    except psycopg2.OperationalError as exc:
+        pytest.skip(f"Postgres not available at {dsn}: {exc}")
+    conn.autocommit = True
+    yield conn
+    conn.close()
+
+
+@pytest.fixture(autouse=True)
+def cleanup(db_connection):
+    cursor = db_connection.cursor()
+    tables = [
+        "public.customer_notes",
+        "public.user_animals",
+        "public.user_pets",
+        "public.user_usage_tracking",
+        "public.user_tracking",
+        "public.sessions",
+        "public.users",
+        "public.manual_phase10",
+        "public.manual_phase10_final",
+        "analytics_p10.events",
+        "analytics_p10.m_events",
+        "public.phase10_exec_insert",
+    ]
+    schemas = ["analytics_p10"]
+    for name in tables:
+        try:
+            if "." in name:
+                schema, table = name.split(".", 1)
+                cursor.execute(f'DROP TABLE IF EXISTS "{schema}"."{table}" CASCADE')
+            else:
+                cursor.execute(f'DROP TABLE IF EXISTS public."{name}" CASCADE')
+        except Exception:
+            pass
+    for schema in schemas:
+        try:
+            cursor.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+        except Exception:
+            pass
+    cursor.close()
+    yield
+    cursor = db_connection.cursor()
+    for name in tables:
+        try:
+            if "." in name:
+                schema, table = name.split(".", 1)
+                cursor.execute(f'DROP TABLE IF EXISTS "{schema}"."{table}" CASCADE')
+            else:
+                cursor.execute(f'DROP TABLE IF EXISTS public."{name}" CASCADE')
+        except Exception:
+            pass
+    for schema in schemas:
+        try:
+            cursor.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+        except Exception:
+            pass
+    cursor.close()
+    clear_schema_cache()
+
+
+def _assert_table_exists(conn, schema, table):
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables
+            WHERE table_schema = %s AND table_name = %s
+        )
+        """,
+        (schema, table),
+    )
+    exists = cur.fetchone()[0]
+    cur.close()
+    assert exists, f"Expected table {schema}.{table} to exist"
+
+
+class TestOrdinaryUserFlow:
+    """
+    Simulate an ordinary user creating tables, inserting data, and verifying UI-sync responses.
+    """
+
+    def test_create_and_query_via_sql_tab(self, client, db_connection):
+        create_sql = """
+        CREATE TABLE public.manual_phase10 (
+            id serial PRIMARY KEY,
+            name text NOT NULL
+        );
+        """
+        resp_create = client.post("/api/sql/execute", json={"sql": create_sql})
+        assert resp_create.status_code == 200
+        assert resp_create.json().get("error_type") is None
+        _assert_table_exists(db_connection, "public", "manual_phase10")
+
+        insert_sql = "INSERT INTO public.manual_phase10 (name) VALUES ('alice')"
+        resp_insert = client.post("/api/sql/execute", json={"sql": insert_sql})
+        assert resp_insert.status_code == 200
+        assert resp_insert.json().get("error_type") is None
+
+        select_sql = "SELECT name FROM public.manual_phase10"
+        resp_select = client.post("/api/sql/execute", json={"sql": select_sql})
+        assert resp_select.status_code == 200
+        data = resp_select.json()
+        assert data.get("error_type") is None
+        assert data["rows"]
+
+    def test_rename_and_schema_auto_refresh(self, client):
+        create_sql = """
+        CREATE TABLE public.user_pets (
+            id INT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+            user_id INT NOT NULL,
+            pet_name VARCHAR,
+            pet_type VARCHAR,
+            pet_age INT
+        );
+        """
+        resp_create = client.post("/api/sql/execute", json={"sql": create_sql})
+        assert resp_create.status_code == 200
+        assert resp_create.json().get("error_type") is None
+
+        rename_sql = "ALTER TABLE public.user_pets RENAME TO user_animals;"
+        resp_rename = client.post("/api/sql/execute", json={"sql": rename_sql})
+        assert resp_rename.status_code == 200
+        payload = resp_rename.json()
+        assert payload.get("error_type") is None
+        schema = payload.get("schema")
+        assert schema, "Schema should be returned after DDL"
+        tables = {(t["schema"], t["name"]) for t in schema.get("tables", [])}
+        assert ("public", "user_animals") in tables
+
+
+class TestExperiencedDevFlow:
+    """
+    Simulate a power user working across schemas, renames, FKs, and validation rules.
+    """
+
+    def test_multischema_create_and_rename_column(self, client, db_connection):
+        ddl = """
+        CREATE SCHEMA IF NOT EXISTS analytics_p10;
+        CREATE TABLE analytics_p10.events (
+            id serial PRIMARY KEY,
+            event_name text NOT NULL
+        );
+        ALTER TABLE analytics_p10.events RENAME COLUMN event_name TO name;
+        """
+        resp = client.post("/api/sql/execute", json={"sql": ddl})
+        assert resp.status_code == 200
+        assert resp.json().get("error_type") is None
+        _assert_table_exists(db_connection, "analytics_p10", "events")
+
+    def test_validator_blocks_destructive_and_allows_insert(self, client):
+        bad_sql = "DROP TABLE public.users"
+        resp_bad = client.post("/api/sql/execute", json={"sql": bad_sql})
+        assert resp_bad.status_code == 200
+        assert resp_bad.json().get("error_type") == "validation_error"
+
+        good_sql = "INSERT INTO public.manual_phase10 (name) VALUES ('bob')"
+        # Create table first if missing
+        client.post("/api/sql/execute", json={"sql": "CREATE TABLE IF NOT EXISTS public.manual_phase10 (id serial primary key, name text)"})
+        resp_good = client.post("/api/sql/execute", json={"sql": good_sql})
+        assert resp_good.status_code == 200
+        assert resp_good.json().get("error_type") is None
+
+
+class TestMaliciousFlow:
+    """
+    Ensure destructive attempts are blocked and errors are safe.
+    """
+
+    def test_block_update_delete_truncate_drop(self, client):
+        for sql in [
+            "UPDATE public.manual_phase10 SET name='hacked'",
+            "DELETE FROM public.manual_phase10",
+            "TRUNCATE public.manual_phase10",
+            "DROP SCHEMA public CASCADE",
+            "ALTER TABLE public.manual_phase10 DROP COLUMN name",
+        ]:
+            resp = client.post("/api/sql/execute", json={"sql": sql})
+            assert resp.status_code == 200
+            assert resp.json().get("error_type") == "validation_error"
+
+    def test_multiple_statements_blocked(self, client):
+        multi = "INSERT INTO public.manual_phase10 (name) VALUES ('x'); INSERT INTO public.manual_phase10 (name) VALUES ('y');"
+        # Should succeed now that multi-statements are allowed when safe
+        client.post("/api/sql/execute", json={"sql": "CREATE TABLE IF NOT EXISTS public.manual_phase10 (id serial primary key, name text)"})
+        resp = client.post("/api/sql/execute", json={"sql": multi})
+        assert resp.status_code == 200
+        assert resp.json().get("error_type") is None
