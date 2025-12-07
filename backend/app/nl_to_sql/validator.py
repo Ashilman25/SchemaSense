@@ -1,24 +1,7 @@
-from typing import List, Tuple, Set
+from typing import List, Tuple
 import sqlglot
 from sqlglot import exp
 from app.models.schema_model import CanonicalSchemaModel
-
-
-#change later idk if i want all these not allowed
-#create, insert should be good but will confirm later
-DISALLOWED_KEYWORDS = {
-    "DROP",
-    "DELETE",
-    "UPDATE",
-    "TRUNCATE",
-    "ALTER",
-    "INSERT", 
-    "CREATE", 
-    "GRANT",
-    "REVOKE",
-    "EXECUTE",
-    "CALL",
-}
 
 
 class SQLValidationError(Exception):
@@ -26,20 +9,30 @@ class SQLValidationError(Exception):
 
 
 def validate_and_normalize_sql(sql: str, schema_model: CanonicalSchemaModel) -> Tuple[str, List[str]]:
-    warnings = []
     try:
-        parsed = sqlglot.parse_one(sql, dialect = "postgres")
+        statements = sqlglot.parse(sql, read = "postgres")
         
     except sqlglot.errors.ParseError as e:
         raise SQLValidationError(f"SQL parsing failed: {str(e)}")
 
+    if not statements:
+        raise SQLValidationError("No SQL statement provided.")
 
-    _check_disallowed_operations(parsed)
-    schema_warnings = _validate_schema_references(parsed, schema_model)
-    warnings.extend(schema_warnings)
+    if len(statements) != 1:
+        raise SQLValidationError("Only a single SQL statement is allowed per request.")
+
+    statement = statements[0]
+
+    _reject_destructive_operations(statement)
+    _enforce_allowed_statement(statement)
+
+    warnings: List[str] = []
+    if isinstance(statement, (exp.Select, exp.Union, exp.With, exp.Subquery, exp.Insert)):
+        schema_warnings = _validate_schema_references(statement, schema_model)
+        warnings.extend(schema_warnings)
     
     try:
-        normalized_sql = sqlglot.transpile(sql, read="postgres", write="postgres")[0]
+        normalized_sql = statement.sql(dialect = "postgres")
         
     except Exception as e:
         raise SQLValidationError(f"SQL normalization failed: {str(e)}")
@@ -52,32 +45,85 @@ def validate_and_normalize_sql(sql: str, schema_model: CanonicalSchemaModel) -> 
 
 
 
-def _check_disallowed_operations(parsed: exp.Expression) -> None:
-
-    node_type = type(parsed).__name__.upper()
-
-
-    if not isinstance(parsed, exp.Select):
-        if not isinstance(parsed, (exp.Union, exp.With, exp.Subquery)):
-            raise SQLValidationError(
-                f"Only SELECT queries are allowed. Found: {node_type}"
-            )
+def _reject_destructive_operations(statement: exp.Expression) -> None:
+    for node in statement.walk():
+        if isinstance(node, (exp.Drop, exp.Delete, exp.Update, exp.TruncateTable)):
+            raise SQLValidationError(f"Disallowed operation: {type(node).__name__}. Destructive statements are not permitted.")
 
 
-    for node in parsed.walk():
-        node_type = type(node).__name__.upper()
-
-        if node_type in DISALLOWED_KEYWORDS:
-            raise SQLValidationError(
-                f"Disallowed operation: {node_type}. Only read-only SELECT queries are permitted."
-            )
-
-        if isinstance(node, (exp.Drop, exp.Delete, exp.Update, exp.Insert, exp.Create)):
-            raise SQLValidationError(
-                f"Disallowed operation: {type(node).__name__}. Only read-only SELECT queries are permitted."
-            )
 
 
+
+#allows only select, union, with, insert, create table, create scheme, alter, add column, or rename
+def _enforce_allowed_statement(statement: exp.Expression) -> None:
+    if isinstance(statement, (exp.Select, exp.Union, exp.With, exp.Subquery)):
+        return
+
+    if isinstance(statement, exp.Insert):
+        return
+
+    if isinstance(statement, exp.Create):
+        if _is_safe_create(statement):
+            return
+        
+        raise SQLValidationError("Only CREATE TABLE or CREATE SCHEMA statements are allowed.")
+
+    if isinstance(statement, exp.Alter):
+        if _is_safe_alter_table_non_destructive(statement):
+            return
+        
+        raise SQLValidationError("Only ALTER TABLE ... ADD COLUMN or RENAME is allowed.")
+
+    raise SQLValidationError(
+        f"Operation not allowed: {type(statement).__name__}. "
+        "Only SELECT/INSERT/CREATE TABLE or SCHEMA/ALTER TABLE ADD COLUMN are permitted."
+    )
+
+
+#only allow create table or create schema
+def _is_safe_create(statement: exp.Create) -> bool:
+    target = statement.this
+    kind = (statement.args.get("kind") or "").upper() if statement.args.get("kind") else None
+
+    if kind == "SCHEMA":
+        return True
+
+    if isinstance(target, exp.Schema):
+        return True
+
+    if isinstance(target, exp.Table):
+        return kind in (None, "TABLE")
+
+    return False
+
+
+#only allow alter table, add col, or rename
+def _is_safe_alter_table_non_destructive(statement: exp.Alter) -> bool:
+    if not isinstance(statement.this, exp.Table):
+        return False
+
+    actions = (
+        statement.args.get("actions")
+        or statement.expressions
+        or statement.args.get("expressions")
+        or []
+    )
+    if not actions:
+        return False
+
+    for action in actions:
+        if isinstance(action, exp.ColumnDef):
+            continue
+
+        action_sql = action.sql(dialect = "postgres") if hasattr(action, "sql") else str(action)
+        action_sql_upper = action_sql.upper()
+        
+        if ("ADD" in action_sql_upper and "COLUMN" in action_sql_upper) or ("RENAME" in action_sql_upper and "TO" in action_sql_upper):
+            continue
+
+        return False
+
+    return True
 
 
 
