@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from app.schema.cache import get_schema
+from app.schema.cache import get_schema, refresh_schema
 from app.nl_to_sql.validator import validate_and_normalize_sql, SQLValidationError
 from app.db import get_connection, get_database_config
 from app.db_provisioner import update_db_activity
@@ -70,7 +70,8 @@ def execute_sql(request: SQLRequest):
                 "message": f"SQL validation failed: {'; '.join(warnings)}"
             }
 
-        if "LIMIT" not in normalized_sql.upper():
+        is_select_like = normalized_sql.lstrip().upper().startswith(("SELECT", "WITH"))
+        if is_select_like and "LIMIT" not in normalized_sql.upper():
             normalized_sql += " LIMIT 500"
 
         conn = get_connection()
@@ -80,11 +81,27 @@ def execute_sql(request: SQLRequest):
         cursor.execute("SET statement_timeout = '30s'")
         cursor.execute(normalized_sql)
 
+        schema_refreshed = None
+        if not is_select_like:
+            conn.commit()
 
-        columns = [desc[0] for desc in cursor.description] if cursor.description else []
-        rows = cursor.fetchall()
-        row_count = len(rows)
-        truncated = row_count >= 500
+            try:
+                schema_refreshed = refresh_schema(conn)
+                
+            except Exception:
+                schema_refreshed = None
+
+        if cursor.description:
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            row_count = len(rows)
+            truncated = is_select_like and row_count >= 500
+
+        else:
+            columns = []
+            rows = []
+            row_count = cursor.rowcount if cursor.rowcount is not None and cursor.rowcount != -1 else 0
+            truncated = False
 
         # Update activity tracking for managed DBs
         db_config = get_database_config()
@@ -95,7 +112,8 @@ def execute_sql(request: SQLRequest):
             "columns": columns,
             "rows": rows,
             "row_count": row_count,
-            "truncated": truncated
+            "truncated": truncated,
+            "schema": schema_refreshed.to_dict_for_api() if schema_refreshed else None,
         }
 
     except SQLValidationError as e:
@@ -136,6 +154,12 @@ def plan_sql(request: SQLRequest):
             return {
                 "error_type" : "validation_error",
                 "message": f"SQL validation failed: {'; '.join(warnings)}"
+            }
+
+        if not normalized_sql.lstrip().upper().startswith(("SELECT", "WITH")):
+            return {
+                "error_type": "validation_error",
+                "message": "Query plans are only available for SELECT statements."
             }
 
         explain_sql = f"EXPLAIN (FORMAT JSON) {normalized_sql}"
