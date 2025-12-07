@@ -6,6 +6,7 @@ from app.nl_to_sql.openai_client import call_openai
 from app.nl_to_sql.service import build_prompt
 from app.nl_to_sql.validator import validate_and_normalize_sql, SQLValidationError
 from app.schema.cache import get_schema
+from typing import List
 
 router = APIRouter(prefix="/api", tags=["nl"])
 logger = logging.getLogger(__name__)
@@ -18,22 +19,23 @@ class NLRequest(BaseModel):
 def nl_to_sql(payload: NLRequest):
     question = payload.question
     raw_sql = None
-    SQL = None
+    sql_list: List[str] | None = None
 
     try:
         model = get_schema()
         prompt = build_prompt(question, model)
         raw_sql = call_openai(prompt)
-        SQL, warnings = validate_and_normalize_sql(raw_sql, model)
+        sql_list, warnings = validate_and_normalize_sql(raw_sql, model)
+        sql_joined = ";\n".join(sql_list)
 
 
         logger.info(
             f"NL to SQL success - Question: {question[:100]}... | "
-            f"SQL: {SQL[:100]}... | Warnings: {len(warnings)}"
+            f"SQL: {sql_joined[:100]}... | Warnings: {len(warnings)}"
         )
 
         return {
-            "sql": SQL,
+            "sql": sql_joined,
             "warnings": warnings,
             "model_used": "gpt-4o-mini"
         }
