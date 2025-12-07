@@ -70,6 +70,33 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
             } else {
                 setQueryResults(response);
                 setError('');
+
+                const ddlPattern = /\b(CREATE\s+TABLE|CREATE\s+SCHEMA|ALTER\s+TABLE|DROP\s+TABLE|DROP\s+SCHEMA|RENAME\s+TO)\b/i;
+                const schemaFromResponse = response.schema;
+
+                // Prefer server-provided schema (after refresh); fallback to manual fetch if schema changing
+                if (schemaFromResponse && onSchemaUpdate) {
+                    onSchemaUpdate(schemaFromResponse, null);
+                    setDdlText('');
+                    setEditedDdlText('');
+
+                } else if (ddlPattern.test(querySql) && onSchemaUpdate) {
+                    try {
+                        const [schemaData, ddlData] = await Promise.all([
+                            schemaAPI.getSchema(),
+                            schemaAPI.getDDL(),
+                        ]);
+
+                        if (schemaData && ddlData?.ddl) {
+                            onSchemaUpdate(schemaData, ddlData.ddl);
+                            setDdlText(ddlData.ddl);
+                            setEditedDdlText(ddlData.ddl);
+                        }
+                        
+                    } catch (refreshErr) {
+                        console.warn('Schema refresh after SQL execute failed:', refreshErr);
+                    }
+                }
             }
 
         } catch (err) {
