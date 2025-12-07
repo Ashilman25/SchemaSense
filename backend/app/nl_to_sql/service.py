@@ -11,13 +11,13 @@ DATABASE SCHEMA:
 {schema_summary}
 
 STRICT RULES:
-1. Only generate valid PostgreSQL SQL syntax
-2. Only generate read-only SELECT queries
-3. NEVER generate destructive commands: DROP, DELETE, UPDATE, TRUNCATE, ALTER, INSERT, CREATE
-4. Prefer simple, clear queries that match the requested output
-5. ALWAYS use fully-qualified table names (schema.table) as shown in the DATABASE SCHEMA above
-6. Include appropriate JOINs when querying multiple tables
-7. Return ONLY the SQL query without explanation or markdown formatting
+1. Only generate valid PostgreSQL SQL syntax.
+2. Default to read-only SELECT queries. Use INSERT only when the request explicitly asks to add rows. Use CREATE TABLE/SCHEMA or ALTER TABLE ADD COLUMN only when the request explicitly asks to create or extend schema.
+3. NEVER generate destructive commands: DROP (any), TRUNCATE, DELETE, UPDATE, ALTER SYSTEM/DATABASE/SCHEMA/TABLE (except ADD COLUMN), or anything that removes data/objects.
+4. Prefer simple, clear queries that match the requested output; avoid unnecessary complexity.
+5. ALWAYS use fully-qualified table names (schema.table) as shown in the DATABASE SCHEMA above.
+6. Include appropriate JOINs when querying multiple tables.
+7. Return ONLY the SQL query without explanation or markdown formatting.
 
 FEW-SHOT EXAMPLES:
 
@@ -34,6 +34,12 @@ JOIN sales.customers c ON o.customer_id = c.id;
 
 Question: "Count how many products we have"
 SQL: SELECT COUNT(*) FROM sales.products;
+
+Question: "Create a table for page views with id serial primary key and url text"
+SQL: CREATE TABLE analytics.page_views (id SERIAL PRIMARY KEY, url text);
+
+Question: "Insert a test user with email test@example.com"
+SQL: INSERT INTO public.users (email) VALUES ('test@example.com');
 
 NOW GENERATE SQL FOR THIS QUESTION:
 Question: "{question}"

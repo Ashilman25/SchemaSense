@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import {dbConfigAPI, schemaAPI} from '../../utils/api';
 import Toast from '../common/Toast';
+import { saveDBCredentials, clearDBCredentials } from '../../utils/dbStorage';
 
 const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess, currentConnection }) => {
   const [formData, setFormData] = useState({
@@ -105,14 +106,13 @@ const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess, currentConnection
   const handleDisconnect = async () => {
     try {
       await dbConfigAPI.disconnect();
+      clearDBCredentials();
 
-      // Show success toast briefly before reload
       setToast({
         type: 'success',
         message: 'Disconnected from database. Refreshing page...'
       });
 
-      // Reload the page after a brief delay to show the toast
       setTimeout(() => {
         window.location.reload();
       }, 800);
@@ -169,9 +169,18 @@ const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess, currentConnection
       const response = isEditMode ? await dbConfigAPI.updateCredentials(configToSend) : await dbConfigAPI.testAndSave(configToSend);
 
       if (response.success) {
+        // Save credentials to sessionStorage for auto-reconnect
+        saveDBCredentials({
+          host: configToSend.host,
+          port: parseInt(configToSend.port),
+          dbname: configToSend.dbname,
+          user: configToSend.user,
+          password: configToSend.password
+        });
+
         onConnectionSuccess();
 
-        // If we were in edit mode, exit it on successful save
+
         if (isEditMode) {
           setIsEditMode(false);
           setIsEditingPassword(false);
@@ -219,6 +228,15 @@ const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess, currentConnection
         setFormData({
           host: response.connection.host,
           port: response.connection.port.toString(),
+          dbname: response.connection.dbname,
+          user: response.connection.user,
+          password: response.connection.password
+        });
+
+
+        saveDBCredentials({
+          host: response.connection.host,
+          port: response.connection.port,
           dbname: response.connection.dbname,
           user: response.connection.user,
           password: response.connection.password

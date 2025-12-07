@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useTheme } from "../../context/ThemeContext";
 import DBConfigModal from "../modals/DBConfigModal";
 import { dbConfigAPI } from "../../utils/api";
+import { loadDBCredentials } from "../../utils/dbStorage";
 
 const TopNavBar = ({ onConnectionChange }) => {
     const {theme, toggleTheme} = useTheme();
@@ -11,13 +12,43 @@ const TopNavBar = ({ onConnectionChange }) => {
 
 
     useEffect(() => {
-        checkConnectionStatus();
+        attemptAutoReconnect();
     }, []);
+
+    const attemptAutoReconnect = async () => {
+        const storedCredentials = loadDBCredentials();
+
+        if (storedCredentials) {
+            console.log('Found stored DB credentials, attempting auto-reconnect...');
+
+            try {
+                const response = await dbConfigAPI.testAndSave(storedCredentials);
+
+                if (response.success) {
+                    console.log('Auto-reconnect successful');
+
+                    setIsConnected(true);
+                    setCurrentConnection(storedCredentials);
+
+                    if (onConnectionChange) {
+                        onConnectionChange(true);
+                    }
+
+                    return;
+                }
+            } catch (error) {
+                console.warn('Auto-reconnect failed, will check normal connection status', error);
+            }
+        }
+
+        await checkConnectionStatus();
+    };
 
     const checkConnectionStatus = async () => {
         try {
             const response = await dbConfigAPI.getStatus();
             const connected = response.connected || false;
+            
             setIsConnected(connected);
 
             if (connected && response.connection) {

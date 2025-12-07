@@ -2,12 +2,14 @@ import psycopg2
 import re
 import time
 import traceback
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, Response
 from app.db import DatabaseConfig, get_database_config, set_database_config, get_connection
 from app.schema.cache import clear_schema_cache
 from app.config import get_settings
+from app.utils.session import get_or_create_session_id
+from app.utils.logging_utils import get_secure_logger
 
-
+logger = get_secure_logger(__name__)
 router = APIRouter(prefix="/api/config", tags=["config"])
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
@@ -46,6 +48,74 @@ def get_db_status():
 
     except Exception:
         return {"connected": False}
+
+
+@router.get("/db/session")
+def get_session_db_config(request: Request, response: Response):
+    session_id = get_or_create_session_id(request, response)
+    settings = get_settings()
+    admin_dsn = settings.managed_pg_admin_dsn
+
+    conn = None
+
+    try:
+        conn = psycopg2.connect(admin_dsn)
+
+        with conn.cursor() as cur:
+            cur.execute("""
+                        SELECT db_name, db_role, created_at, last_used_at
+                        FROM provisioned_dbs
+                        WHERE session_id = %s AND status = 'active'
+                        ORDER BY last_used_at DESC
+                        LIMIT 1
+                        """, (session_id,))
+
+            row = cur.fetchone()
+
+            if not row:
+                return {
+                    "success" : True,
+                    "has_provisioned_db" : False,
+                    "message" : "No active provisioned database found for this session"
+                }
+
+            db_name, db_role, created_at, last_used_at = row
+
+            match = re.match(r'postgresql://[^@]+@([^:]+):(\d+)/', admin_dsn)
+            
+            if match:
+                host = match.group(1)
+                port = int(match.group(2))
+                
+            else:
+                host = "localhost"
+                port = 5432
+
+            return {
+                "success" : True,
+                "has_provisioned_db" : True,
+                "db_info" : {
+                    "host" : host,
+                    "port" : port,
+                    "dbname" : db_name,
+                    "user" : db_role,
+                    "created_at" : created_at.isoformat() if created_at else None,
+                    "last_used_at" : last_used_at.isoformat() if last_used_at else None
+                },
+                "note": "Password not included. Use sessionStorage credentials for reconnect."
+            }
+
+    except Exception as e:
+        logger.error("Failed to fetch session DB config", session_id = session_id, error = str(e))
+        
+        return {
+            "success" : False,
+            "message" : f"Failed to retrieve session database config: {str(e)}"
+        }
+
+    finally:
+        if conn:
+            conn.close()
 
 
 #disconnect from db
