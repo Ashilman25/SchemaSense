@@ -20,7 +20,7 @@ def _sample_schema():
 def test_select_is_allowed_and_validated():
     model = _sample_schema()
     normalized, warnings = validate_and_normalize_sql("select email from public.users", model)
-    assert "SELECT" in normalized.upper()
+    assert normalized[0].upper().startswith("SELECT")
     assert warnings == []
 
 
@@ -30,7 +30,7 @@ def test_insert_is_allowed_and_validated():
         "INSERT INTO public.users (id, email) VALUES (1, 'a@b.com')",
         model,
     )
-    assert normalized.upper().startswith("INSERT")
+    assert normalized[0].upper().startswith("INSERT")
     assert warnings == []
 
 
@@ -40,7 +40,7 @@ def test_create_table_is_allowed():
         "CREATE TABLE public.new_table (id serial PRIMARY KEY)",
         model,
     )
-    assert normalized.upper().startswith("CREATE TABLE")
+    assert normalized[0].upper().startswith("CREATE TABLE")
     assert warnings == []
 
 
@@ -50,7 +50,7 @@ def test_create_schema_is_allowed():
         "CREATE SCHEMA analytics",
         model,
     )
-    assert normalized.upper().startswith("CREATE SCHEMA")
+    assert normalized[0].upper().startswith("CREATE SCHEMA")
     assert warnings == []
 
 
@@ -60,7 +60,7 @@ def test_alter_table_add_column_is_allowed():
         "ALTER TABLE public.users ADD COLUMN age integer",
         model,
     )
-    assert "ADD COLUMN" in normalized.upper()
+    assert "ADD COLUMN" in normalized[0].upper()
     assert warnings == []
 
 
@@ -70,7 +70,7 @@ def test_alter_table_rename_is_allowed():
         "ALTER TABLE public.users RENAME TO public.users_new",
         model,
     )
-    assert "RENAME" in normalized.upper()
+    assert "RENAME" in normalized[0].upper()
     assert warnings == []
 
 
@@ -80,7 +80,7 @@ def test_alter_table_rename_column_is_allowed():
         "ALTER TABLE public.users RENAME COLUMN email TO primary_email",
         model,
     )
-    assert "RENAME" in normalized.upper()
+    assert "RENAME" in normalized[0].upper()
     assert warnings == []
 
 
@@ -110,8 +110,31 @@ def test_alter_table_drop_column_is_blocked():
 
 def test_multiple_statements_are_blocked():
     model = _sample_schema()
+    normalized, warnings = validate_and_normalize_sql(
+        "INSERT INTO public.users (id, email) VALUES (1, 'a'); INSERT INTO public.users (id, email) VALUES (2, 'b')",
+        model,
+    )
+    assert len(normalized) == 2
+    assert warnings == []
+
+
+def test_multiple_statements_with_destructive_is_blocked():
+    model = _sample_schema()
     with pytest.raises(SQLValidationError):
         validate_and_normalize_sql(
-            "INSERT INTO public.users (id, email) VALUES (1, 'a'); INSERT INTO public.users (id, email) VALUES (2, 'b')",
+            "INSERT INTO public.users (id, email) VALUES (1, 'a'); DROP TABLE public.users",
             model,
         )
+
+
+def test_select_alias_allowed_in_order_by():
+    model = _sample_schema()
+    sql = """
+    SELECT email, COUNT(*) AS total_count
+    FROM public.users
+    GROUP BY email
+    ORDER BY total_count DESC
+    """
+    normalized, warnings = validate_and_normalize_sql(sql, model)
+    assert normalized[0].upper().startswith("SELECT")
+    assert warnings == []
