@@ -36,7 +36,10 @@ def client(test_db_config):
 def db_connection(test_db_config):
     """Create direct database connection for verification."""
     dsn = f"postgresql://{test_db_config.user}:{test_db_config.password}@{test_db_config.host}:{test_db_config.port}/{test_db_config.dbname}"
-    conn = psycopg2.connect(dsn)
+    try:
+        conn = psycopg2.connect(dsn)
+    except psycopg2.OperationalError as exc:
+        pytest.skip(f"Postgres not available at {dsn}: {exc}")
     conn.autocommit = True
     yield conn
     conn.close()

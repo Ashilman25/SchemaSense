@@ -50,7 +50,10 @@ def db_connection(test_db_config):
         f"postgresql://{test_db_config.user}:{test_db_config.password}"
         f"@{test_db_config.host}:{test_db_config.port}/{test_db_config.dbname}"
     )
-    conn = psycopg2.connect(dsn)
+    try:
+        conn = psycopg2.connect(dsn)
+    except psycopg2.OperationalError as exc:
+        pytest.skip(f"Postgres not available at {dsn}: {exc}")
     conn.autocommit = True
     yield conn
     conn.close()
@@ -69,16 +72,33 @@ def cleanup_test_artifacts(db_connection):
         "phase10_inline_pk",
         "phase10_cache_new",
         "phase10_activity_table",
+        "phase10_exec_insert",
+        "analytics_p10.m_events",
     ]
 
     cursor = db_connection.cursor()
     for name in tables:
-        cursor.execute(f'DROP TABLE IF EXISTS public.{name} CASCADE')
+        try:
+            if "." in name:
+                schema, table = name.split(".", 1)
+                cursor.execute(f'DROP TABLE IF EXISTS {schema}.{table} CASCADE')
+            else:
+                cursor.execute(f'DROP TABLE IF EXISTS public.{name} CASCADE')
+        except Exception:
+            pass
     cursor.close()
     yield
     cursor = db_connection.cursor()
     for name in tables:
-        cursor.execute(f'DROP TABLE IF EXISTS public.{name} CASCADE')
+        try:
+            if "." in name:
+                schema, table = name.split(".", 1)
+                cursor.execute(f'DROP TABLE IF EXISTS {schema}.{table} CASCADE')
+            else:
+                cursor.execute(f'DROP TABLE IF EXISTS public.{name} CASCADE')
+        except Exception:
+            pass
+    cursor.execute("DROP SCHEMA IF EXISTS analytics_p10 CASCADE")
     cursor.close()
     clear_schema_cache()
 
@@ -372,3 +392,55 @@ class TestSessionCookiePersistence:
         session_id_second = get_or_create_session_id(request2, response2)
         assert session_id_second == session_id_first, "Session ID should persist across calls with cookie"
         assert "set-cookie" not in response2.headers, "Existing session should not emit a new cookie"
+
+
+class TestEndToEndQueryability:
+    """
+    Phase 10.6: after DDL, inserts should succeed and data should be selectable via /api/sql/execute.
+    """
+
+    def test_create_insert_and_select_round_trip(self, client):
+        ddl = """
+        CREATE TABLE public.phase10_exec_insert (
+            id serial PRIMARY KEY,
+            name text NOT NULL
+        )
+        """
+        create_response = client.post("/api/schema/ddl-edit", json={"ddl": ddl})
+        assert create_response.status_code == 200
+        assert create_response.json()["success"] is True
+
+        insert_sql = "INSERT INTO public.phase10_exec_insert (name) VALUES ('alice')"
+        insert_response = client.post("/api/sql/execute", json={"sql": insert_sql})
+        assert insert_response.status_code == 200
+        assert insert_response.json().get("error_type") is None
+        assert insert_response.json().get("row_count", 0) >= 1
+
+        select_sql = "SELECT name FROM public.phase10_exec_insert"
+        select_response = client.post("/api/sql/execute", json={"sql": select_sql})
+        assert select_response.status_code == 200
+        data = select_response.json()
+        assert data.get("error_type") is None
+        assert data["rows"], "Select after insert should return at least one row"
+
+
+class TestNonPublicSchemaIntrospection:
+    """
+    Ensure introspection and refresh include user schemas beyond public.
+    """
+
+    def test_schema_refresh_includes_custom_schema(self, client):
+        ddl = """
+        CREATE SCHEMA IF NOT EXISTS analytics_p10;
+        CREATE TABLE analytics_p10.m_events (
+            id serial PRIMARY KEY,
+            event_name text NOT NULL
+        );
+        """
+        response = client.post("/api/schema/ddl-edit", json={"ddl": ddl})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["success"] is True
+
+        tables = {(t["schema"], t["name"]) for t in payload["schema"]["tables"]}
+        assert ("analytics_p10", "m_events") in tables, "Custom schema table should appear after refresh"
