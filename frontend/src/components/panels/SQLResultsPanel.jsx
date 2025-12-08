@@ -757,7 +757,7 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
                                             <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
                                         <p className = "text-xs text-blue-800 dark:text-blue-200">
-                                            Editing this DDL updates the in-app schema model only. It does not change the live database by default.
+                                            Editing this DDL will update directly to PostgresSQL, so please double-check all modifications or additions.
                                         </p>
                                     </div>
                                 </div>
