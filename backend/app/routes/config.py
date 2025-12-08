@@ -2,12 +2,13 @@ import psycopg2
 import re
 import time
 import traceback
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Request, Response, Depends
 from app.db import DatabaseConfig, get_database_config, set_database_config, get_connection
 from app.schema.cache import clear_schema_cache
 from app.config import get_settings
 from app.utils.session import get_or_create_session_id
 from app.utils.logging_utils import get_secure_logger
+from app.routes.db_provision import verify_admin_key
 
 logger = get_secure_logger(__name__)
 router = APIRouter(prefix="/api/config", tags=["config"])
@@ -51,7 +52,7 @@ def get_db_status():
 
 
 @router.get("/db/session")
-def get_session_db_config(request: Request, response: Response):
+def get_session_db_config(request: Request, response: Response, authorized: bool = Depends(verify_admin_key)):
     session_id = get_or_create_session_id(request, response)
     settings = get_settings()
     admin_dsn = settings.managed_pg_admin_dsn
