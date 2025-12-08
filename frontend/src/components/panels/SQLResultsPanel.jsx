@@ -1,4 +1,4 @@
-import {useState, useEffect, useRef} from 'react';
+import {useState, useEffect, useRef, useCallback} from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import {sql} from '@codemirror/lang-sql';
 import {oneDark} from '@codemirror/theme-one-dark';
@@ -31,6 +31,16 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
     const [isDdlLoading, setIsDdlLoading] = useState(false);
     const [isDdlApplying, setIsDdlApplying] = useState(false);
     const [notification, setNotification] = useState(null);
+    const [resultsHeight, setResultsHeight] = useState(280);
+    const [isVerticalDragging, setIsVerticalDragging] = useState(false);
+
+    const queryTabRef = useRef(null);
+    const verticalDragStateRef = useRef(null);
+    const resultsAreaRef = useRef(null);
+
+    const MIN_RESULTS_HEIGHT = 180;
+    const MIN_TOP_HEIGHT = 140;
+    const DRAG_MARGIN = 16; // spacing between sections
 
     useEffect(() => {
         if (generatedSql) {
@@ -253,6 +263,68 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
         };
     }, [isDownloadMenuOpen]);
 
+    const stopVerticalDrag = useCallback(() => {
+        if (!verticalDragStateRef.current) return;
+
+        document.removeEventListener('mousemove', handleVerticalDrag);
+        document.removeEventListener('mouseup', stopVerticalDrag);
+        document.body.style.userSelect = '';
+
+        verticalDragStateRef.current = null;
+        setIsVerticalDragging(false);
+
+    }, []);
+
+    const handleVerticalDrag = useCallback((event) => {
+        const dragState = verticalDragStateRef.current;
+        if (!dragState || !queryTabRef.current) return;
+
+        const {startY, initialHeight} = dragState;
+        const deltaY = event.clientY - startY;
+        const containerHeight = queryTabRef.current.getBoundingClientRect().height || 0;
+        const marginAllowance = DRAG_MARGIN;
+        const maxHeight = containerHeight
+            ? Math.max(MIN_RESULTS_HEIGHT, containerHeight - MIN_TOP_HEIGHT - marginAllowance)
+            : undefined;
+
+        let nextHeight = initialHeight - deltaY;
+        if (maxHeight) {
+            nextHeight = Math.min(nextHeight, maxHeight);
+        }
+
+        nextHeight = Math.max(nextHeight, MIN_RESULTS_HEIGHT);
+
+        setResultsHeight(nextHeight);
+
+    }, []);
+
+    const startVerticalDrag = (event) => {
+        if (!queryTabRef.current) return;
+        event.preventDefault();
+
+        const measuredHeight = resultsAreaRef.current?.getBoundingClientRect().height;
+        const baseHeight = resultsHeight ?? measuredHeight ?? MIN_RESULTS_HEIGHT;
+        const initialHeight = Math.max(baseHeight, MIN_RESULTS_HEIGHT);
+
+        verticalDragStateRef.current = {
+            startY: event.clientY,
+            initialHeight
+        };
+
+        document.body.style.userSelect = 'none';
+        setIsVerticalDragging(true);
+
+        document.addEventListener('mousemove', handleVerticalDrag);
+        document.addEventListener('mouseup', stopVerticalDrag);
+        
+    };
+
+    useEffect(() => {
+        return () => {
+            stopVerticalDrag();
+        };
+    }, [stopVerticalDrag]);
+
     const handleDownloadJSON = () => {
         if (!queryResults || !queryResults.columns || !queryResults.rows) {
             return;
@@ -333,82 +405,95 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
             </div>
 
             {/* tab content */}
-            <div className = "flex-1 p-4 overflow-auto">
+            <div className = "flex-1 p-4 overflow-y-auto overflow-x-hidden">
                 {activeTab === 'query' && (
-                    <div className = "h-full flex flex-col">
+                    <div className = "h-full flex flex-col" ref = {queryTabRef}>
 
-                        {/* sql editor */}
-                        <div className = "flex-1 min-h-[200px] rounded-lg border border-gray-200 dark:border-slate-600 overflow-hidden">
-                            <CodeMirror
-                                value = {querySql}
-                                height = "100%"
-                                minHeight = "200px"
-                                extensions = {[sql()]}
-                                onChange = {(value) => setQuerySql(value)}
-                                editable = {isEditable}
-                                readOnly = {!isEditable}
-                                theme = {theme === 'dark' ? oneDark : 'light'}
-                                className = "h-full"
-                                basicSetup = {{
-                                    lineNumbers: true,
-                                    highlightActiveLineGutter: true,
-                                    highlightSpecialChars: true,
-                                    foldGutter: true,
-                                    drawSelection: true,
-                                    dropCursor: true,
-                                    allowMultipleSelections: true,
-                                    indentOnInput: true,
-                                    syntaxHighlighting: true,
-                                    bracketMatching: true,
-                                    closeBrackets: true,
-                                    autocompletion: true,
-                                    rectangularSelection: true,
-                                    crosshairCursor: true,
-                                    highlightActiveLine: true,
-                                    highlightSelectionMatches: true,
-                                    closeBracketsKeymap: true,
-                                    searchKeymap: true,
-                                    foldKeymap: true,
-                                    completionKeymap: true,
-                                    lintKeymap: true,
-                                }}
-                            />
-                        </div>
+                        <div className = "flex-1 flex flex-col" style = {{minHeight: MIN_TOP_HEIGHT}}>
 
-                        {/* run query button */}
-                        <div className = "mt-4 flex items-center space-x-2">
-                            <button
-                                onClick = {handleExecuteQuery}
-                                disabled = {isLoading}
-                                className = {`
-                                    bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600
-                                    text-white font-medium py-2 px-4 rounded-lg transition-colors
-                                    flex items-center space-x-2
-                                    ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}
-                                `}
-                            >
-                                {isLoading && (
-                                    <svg className = "animate-spin h-4 w-4 text-white" xmlns = "http://www.w3.org/2000/svg" fill = "none" viewBox = "0 0 24 24">
-                                        <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
-                                        <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                )}
-                                <span>{isLoading ? 'Running...' : 'Run Query'}</span>
-                            </button>
-
-                            <label className = "flex items-center text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
-                                <input
-                                    type = "checkbox"
-                                    className = "mr-2"
-                                    checked={isEditable}
-                                    onChange={(e) => setIsEditable(e.target.checked)}
+                            {/* sql editor */}
+                            <div className = "flex-1 min-h-[140px] rounded-lg border border-gray-200 dark:border-slate-600 overflow-hidden">
+                                <CodeMirror
+                                    value = {querySql}
+                                    height = "100%"
+                                    minHeight = "140px"
+                                    extensions = {[sql()]}
+                                    onChange = {(value) => setQuerySql(value)}
+                                    editable = {isEditable}
+                                    readOnly = {!isEditable}
+                                    theme = {theme === 'dark' ? oneDark : 'light'}
+                                    className = "h-full"
+                                    basicSetup = {{
+                                        lineNumbers: true,
+                                        highlightActiveLineGutter: true,
+                                        highlightSpecialChars: true,
+                                        foldGutter: true,
+                                        drawSelection: true,
+                                        dropCursor: true,
+                                        allowMultipleSelections: true,
+                                        indentOnInput: true,
+                                        syntaxHighlighting: true,
+                                        bracketMatching: true,
+                                        closeBrackets: true,
+                                        autocompletion: true,
+                                        rectangularSelection: true,
+                                        crosshairCursor: true,
+                                        highlightActiveLine: true,
+                                        highlightSelectionMatches: true,
+                                        closeBracketsKeymap: true,
+                                        searchKeymap: true,
+                                        foldKeymap: true,
+                                        completionKeymap: true,
+                                        lintKeymap: true,
+                                    }}
                                 />
-                                Unlock editing
-                            </label>
+                            </div>
+
+                            {/* run query button */}
+                            <div className = "mt-4 flex items-center space-x-2">
+                                <button
+                                    onClick = {handleExecuteQuery}
+                                    disabled = {isLoading}
+                                    className = {`
+                                        bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600
+                                        text-white font-medium py-2 px-4 rounded-lg transition-colors
+                                        flex items-center space-x-2
+                                        ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}
+                                    `}
+                                >
+                                    {isLoading && (
+                                        <svg className = "animate-spin h-4 w-4 text-white" xmlns = "http://www.w3.org/2000/svg" fill = "none" viewBox = "0 0 24 24">
+                                            <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
+                                            <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    )}
+                                    <span>{isLoading ? 'Running...' : 'Run Query'}</span>
+                                </button>
+
+                                <label className = "flex items-center text-sm text-gray-600 dark:text-gray-400 cursor-pointer">
+                                    <input
+                                        type = "checkbox"
+                                        className = "mr-2"
+                                        checked={isEditable}
+                                        onChange={(e) => setIsEditable(e.target.checked)}
+                                    />
+                                    Unlock editing
+                                </label>
+                            </div>
                         </div>
 
                         {/* results area */}
-                        <div className = "mt-4 flex-1 bg-gray-50 dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-600 overflow-hidden transition-colors flex flex-col">
+                        <div
+                            ref = {resultsAreaRef}
+                            className = "mt-4 bg-gray-50 dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-600 overflow-hidden transition-colors flex flex-col relative"
+                            style = {resultsHeight
+                                ? {height: `${resultsHeight}px`, minHeight: MIN_RESULTS_HEIGHT, flex: '0 0 auto'}
+                                : {minHeight: MIN_RESULTS_HEIGHT, flex: '1 1 auto'}}
+                        >
+                            <div
+                                className = {`absolute top-0 left-0 right-0 h-2 cursor-row-resize z-20 transition-colors ${isVerticalDragging ? 'bg-blue-500/10' : 'hover:bg-blue-500/10'}`}
+                                onMouseDown = {startVerticalDrag}
+                            />
 
                             {/* Error Message */}
                             {error && (
@@ -558,7 +643,7 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
                                     </div>
 
                                     {/* Table Container */}
-                                    <div className="flex-1 overflow-auto">
+                                    <div className="flex-1 overflow-y-auto overflow-x-hidden">
                                         <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
                                             <thead className="bg-gray-100 dark:bg-slate-700 sticky top-0">
                                                 <tr>
@@ -757,7 +842,7 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
                                             <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
                                         <p className = "text-xs text-blue-800 dark:text-blue-200">
-                                            Editing this DDL updates the in-app schema model only. It does not change the live database by default.
+                                            Editing this DDL will update directly to PostgresSQL, so please double-check all modifications or additions.
                                         </p>
                                     </div>
                                 </div>

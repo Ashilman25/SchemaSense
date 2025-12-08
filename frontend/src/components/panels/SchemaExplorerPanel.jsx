@@ -2,6 +2,36 @@ import {useState, useEffect, useCallback} from "react";
 import { schemaAPI } from "../../utils/api";
 import ERDiagram from "../diagram/ERDiagram";
 
+const isProtectedTable = (table) => {
+    if (!table) return false;
+
+    const schemaName = (table.schema || '').toLowerCase();
+    const tableName = (table.name || '').toLowerCase();
+
+    if (!tableName) return false;
+
+    if (tableName === 'query_history' || tableName === 'queryhistory') return true;
+    if (`${schemaName}.${tableName}` === 'schemasense.query_history') return true;
+
+    return false;
+};
+
+const sanitizeSchema = (rawSchema) => {
+    if (!rawSchema) return null;
+
+    const filteredTables = (rawSchema.tables || []).filter((t) => !isProtectedTable(t));
+    const allowedKeys = new Set(filteredTables.map(t => `${t.schema}.${t.name}`));
+    const filteredRelationships = (rawSchema.relationships || []).filter(
+        (rel) => allowedKeys.has(rel.from_table) && allowedKeys.has(rel.to_table)
+    );
+
+    return {
+        ...rawSchema,
+        tables: filteredTables,
+        relationships: filteredRelationships
+    };
+};
+
 const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, onSchemaChange, onRegisterUpdateCallback }) => {
     const [activeTab, setActiveTab] = useState('tables')
     const [schema, setSchema] = useState(null);
@@ -37,6 +67,8 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, o
     }, [schema, currentDdl, onSchemaChange]); 
 
     const handleSchemaUpdate = useCallback((newSchema, newDDL) => {
+        const sanitizedSchema = sanitizeSchema(newSchema);
+
         setUndoStack(prevStack => {
             if (schema && currentDdl) {
                 const snapshot = {
@@ -56,7 +88,7 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, o
         });
 
         setRedoStack([]);
-        setSchema(newSchema);
+        setSchema(sanitizedSchema);
         setCurrentDdl(newDDL);
 
         setNotification({
@@ -198,7 +230,9 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, o
                 schemaAPI.getDDL()
             ]);
 
-            setSchema(schemaData);
+            const sanitized = sanitizeSchema(schemaData);
+
+            setSchema(sanitized);
             setCurrentDdl(ddlData.ddl);
             setUndoStack([]);
             setRedoStack([]);

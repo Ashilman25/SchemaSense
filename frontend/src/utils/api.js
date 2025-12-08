@@ -14,16 +14,44 @@ export const apiRequest = async (endpoint, options = {}) => {
 
   try {
     const response = await fetch(url, config);
-    const data = await response.json();
+
+    let data = null;
+
+    try {
+      data = await response.json();
+    } catch (_err) {
+      data = null;
+    }
 
     if (!response.ok) {
-      throw new Error(data.message || `API Error: ${response.status}`);
+      const serverMessage =
+        (data && (data.message || data.detail?.message || data.detail)) || null;
+
+      const friendlyMessage =
+        (serverMessage && typeof serverMessage === 'string' ? serverMessage : 'We ran into a problem completing that request. Please try again in a moment.');
+
+      const error = new Error(friendlyMessage);
+      error.status = response.status;
+      error.serverMessage = serverMessage;
+      error.isFriendly = true;
+
+      throw error;
     }
 
     return data;
+
   } catch (error) {
     console.error('API Request Error:', error);
-    throw error;
+
+    if (error?.isFriendly) {
+      throw error;
+    }
+
+    const fallbackMessage = 'We could not reach the server. Please check your connection and try again.';
+    const wrappedError = new Error(fallbackMessage);
+    wrappedError.cause = error;
+
+    throw wrappedError;
   }
 };
 

@@ -1,4 +1,5 @@
 import {useState, useEffect} from 'react';
+import DataTypeSelect from '../common/DataTypeSelect';
 
 const EditColumnModal = ({isOpen, onClose, onSubmit, column, mode = 'add'}) => {
     const [columnName, setColumnName] = useState('');
@@ -114,12 +115,10 @@ const EditColumnModal = ({isOpen, onClose, onSubmit, column, mode = 'add'}) => {
                                 Type
                             </label>
 
-                            <input 
-                                type = "text"
+                            <DataTypeSelect
                                 value = {columnType}
-                                onChange = {(e) => setColumnType(e.target.value)}
-                                className = "w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100"
-                                placeholder = "e.g., varchar, integer, serial"                            
+                                onChange = {setColumnType}
+                                placeholder = "Search or pick a type"
                             />
                         </div>
 
