@@ -1,4 +1,5 @@
 import {useState} from 'react';
+import DataTypeSelect from '../common/DataTypeSelect';
 
 const AddTableModal = ({isOpen, onClose, onSubmit}) => {
     const [tableName, setTableName] = useState('');
@@ -174,12 +175,10 @@ const AddTableModal = ({isOpen, onClose, onSubmit}) => {
                                                 Type
                                             </label>
 
-                                            <input
-                                                type = "text"
+                                            <DataTypeSelect
                                                 value = {column.type}
-                                                onChange = {(e) => handleColumnChange(index, 'type', e.target.value)}
-                                                className = "w-full px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100"
-                                                placeholder = "e.g., varchar, integer"
+                                                onChange = {(next) => handleColumnChange(index, 'type', next)}
+                                                placeholder = "Start typing to search"
                                             />
                                         </div>
                                     </div>
