@@ -782,11 +782,13 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, o
                         </div>
 
                         <div
-                            className = {`h-full w-2.5 cursor-col-resize transition-colors ${isModalHandleActive ? 'bg-blue-500/20' : isModalHandleHover ? 'bg-blue-500/10' : 'bg-transparent'}`}
+                            className = {`relative h-full w-2.5 cursor-col-resize transition-colors ${isModalHandleActive ? 'bg-blue-500/20' : isModalHandleHover ? 'bg-blue-500/10' : 'bg-gray-200/70 dark:bg-slate-700/70'}`}
                             onMouseDown = {startModalDrag}
                             onMouseEnter = {() => setIsModalHandleHover(true)}
                             onMouseLeave = {() => setIsModalHandleHover(false)}
-                        />
+                        >
+                            <span className = "absolute inset-y-2 left-1/2 w-px bg-gray-300 dark:bg-slate-600 transform -translate-x-1/2" />
+                        </div>
 
                         <div
                             className = "flex flex-col h-full min-w-[320px] overflow-hidden"
