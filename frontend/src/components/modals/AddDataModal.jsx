@@ -166,13 +166,95 @@ const AddDataModal = ({isOpen, onClose}) => {
   };
 
 
+  //row management funcs
+  const handleAddRow = () => {
+    if (!tableMetadata) return;
+
+    const emptyRow = {};
+
+    tableMetadata.columns.forEach(col => {
+      emptyRow[col.name] = '';
+    });
+
+    setRows([...rows, emptyRow]);
+    setHasDraftData(true);
+  };
 
 
+  const handleDeleteRow = (rowIndex) => {
+    const newRows = rows.filter((_, idx) => idx !== rowIndex);
+    setRows(newRows.length > 0 ? newRows : []);
+
+    const newErrors = {...validationErrors};
+    delete newErrors[rowIndex];
+    const reindexedErrors = {};
+
+    Object.keys(newErrors).forEach(key => {
+      const idx = parseInt(key);
+
+      if (idx > rowIndex) {
+        reindexedErrors[idx - 1] = newErrors[key];
+      } else {
+        reindexedErrors[idx] = newErrors[key];
+      }
+    });
+
+    setValidationErrors(reindexedErrors);
+    setHasDraftData(newRows.length > 0);
+  };
 
 
+  const handleClearAll = () => {
+    if (!tableMetadata) return;
+    initializeRows(tableMetadata);
+    setHasDraftData(false);
+  };
+
+  
+  const handleCellChange = (rowIndex, columnName, value) => {
+    const newRows = [...rows];
+    newRows[rowIndex][columnName] = value;
+    setRows(newRows);
+    setHasDraftData(true);
+
+    if (validationErrors[rowIndex]?.[columnName]) {
+      const newErrors = {...validationErrors};
+      delete newErrors[rowIndex][columnName];
+
+      if (Object.keys(newErrors[rowIndex]).length === 0) {
+        delete newErrors[rowIndex];
+      }
+      setValidationErrors(newErrors);
+    }
+  };
 
 
+  const getInputPlaceholder = (column) => {
+    const type = column.type.toLowerCase();
 
+    if (column.nullable) {
+      if (type.includes('int')) return 'e.g., 123 (or leave empty for NULL)';
+      if (type.includes('varchar') || type.includes('text')) return 'Enter text (or leave empty for NULL)';
+      if (type.includes('bool')) return 'true/false (or leave empty for NULL)';
+      if (type.includes('date') && !type.includes('timestamp')) return 'YYYY-MM-DD (or leave empty for NULL)';
+      if (type.includes('timestamp')) return 'YYYY-MM-DD HH:MM:SS (or leave empty for NULL)';
+      if (type.includes('uuid')) return 'UUID format (or leave empty for NULL)';
+      if (type.includes('json')) return '{"key": "value"} (or leave empty for NULL)';
+
+      return 'Leave empty for NULL';
+
+    } else {
+      if (type.includes('int')) return 'e.g., 123';
+      if (type.includes('varchar') || type.includes('text')) return 'Enter text';
+      if (type.includes('bool')) return 'true/false';
+      if (type.includes('date') && !type.includes('timestamp')) return 'YYYY-MM-DD';
+      if (type.includes('timestamp')) return 'YYYY-MM-DD HH:MM:SS';
+      if (type.includes('uuid')) return 'UUID format';
+      if (type.includes('json')) return '{"key": "value"}';
+
+      return 'Enter value';
+    }
+  };
 
 
   const handleClose = () => {
