@@ -6,7 +6,9 @@ import {useTheme} from '../../context/ThemeContext';
 import {format} from 'sql-formatter';
 import { sqlAPI, schemaAPI } from '../../utils/api';
 import QueryPlanVisualization from '../QueryPlanVisualization';
-import { exportAsJson, exportAsCSV, exportAsPDF } from '../../utils/downloads';
+import { exportAsJson, exportAsCSV, exportAsPDF, exportAsTXT } from '../../utils/downloads';
+
+
 
 
 const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema, currentDdl, onSchemaUpdate }) => {
@@ -367,6 +369,20 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
         }
     };
 
+    const handleDownloadTXT = () => {
+        if (!queryResults || !queryResults.columns || !queryResults.rows) {
+            return;
+        }
+
+        const baseName = querySql.split('\n')[0].replace(/^--/, '').trim().substring(0, 50) || 'query_results';
+        const queryTitle = querySql.split('\n')[0].replace(/^--/, '').trim().substring(0, 100) || 'Query Results Report';
+
+        exportAsTXT(queryResults.columns, queryResults.rows, baseName, queryTitle);
+        setIsDownloadMenuOpen(false);
+    };
+
+
+
 
 
     return (
@@ -637,6 +653,20 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
 
                                                         <span>Download as PDF</span>
                                                     </button>
+
+                                                    <button
+                                                        className = "w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 focus:bg-gray-100 dark:focus:bg-slate-700 focus:outline-none flex items-center space-x-2 transition-colors"
+                                                        role = "menuitem"
+                                                        tabIndex = {0}
+                                                    >
+                                                        <svg className = "w-4 h-4" fill = "currentColor" viewBox = "0 0 16 16">
+                                                            <path fillRule = "evenodd" clipRule = "evenodd" d = "M2 1.5a.5.5 0 0 1 .5-.5H9a.5.5 0 0 1 .354.146l2.5 2.5A.5.5 0 0 1 12 4v2h-1V5H8.5a.5.5 0 0 1-.5-.5V2H3v12h8v-.5h1v1a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5zm7 .707V4h1.793zM8.875 9.5c-.298.4-.593.803-.827 1.167a5.5 5.5 0 0 0-.374.664c-.091.2-.174.436-.174.669h1a.8.8 0 0 1 .084-.253q.102-.225.305-.54c.173-.267.383-.561.611-.87c.228.309.438.603.61.87q.203.315.306.54a1.3 1.3 0 0 1 .082.233l.002.015v.004l1 .001c0-.233-.083-.469-.174-.669a5.5 5.5 0 0 0-.374-.664a21 21 0 0 0-.827-1.167c.298-.4.593-.803.827-1.167c.147-.228.278-.454.374-.664c.091-.2.174-.435.174-.669h-1v.005l-.002 .015l-.013 .053a1.3 1.3 0 0 1-.069 .18q-.102 .225-.305 .54a17 17 0 0 1-.611 .87a17 17 0 0 1-.61-.87a4.5 4.5 0 0 1-.306-.54A.8.8 0 0 1 8.5 7h-1c0 .234.083 .469.174 .669c.096 .21.227 .436.374 .664c.234 .364.529 .767.827 1.167M4 7h3v1H6v4H5V8H4zm8 0h3v1h-1v4h-1V8h-1z" />
+                                                        </svg>
+
+                                                        <span>Download as TXT</span>
+                                                    </button>
+
+
                                                 </div>
                                             )}
                                         </div>
