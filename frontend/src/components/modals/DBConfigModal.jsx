@@ -295,7 +295,7 @@ const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess, currentConnection
           <div className = "w-48 bg-gray-50 dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex flex-col">
 
             {/* Header for sidebar */}
-            <div className = "px-4 py-4 border-b border-gray-200 dark:border-slate-700">
+            <div className = "px-4 py-5 border-b border-gray-200 dark:border-slate-700">
               <h2 className = "text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
                 Database
               </h2>
@@ -444,11 +444,10 @@ const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess, currentConnection
               <div className = "space-y-3">
                 <div className = "text-sm text-gray-600 dark:text-gray-400 space-y-2">
                   <p>
-                    Create an <strong>empty demo database</strong> hosted for you. Perfect for trying out SchemaSense!
+                    Create an <strong>empty database</strong> hosted for you. Perfect for trying out SchemaSense!
                   </p>
 
                   <ul className = "list-disc list-inside space-y-1 text-xs">
-                    <li>Not production-grade storage</li>
                     <li>May be temporary and cleaned up after inactivity</li>
                   </ul>
                 </div>

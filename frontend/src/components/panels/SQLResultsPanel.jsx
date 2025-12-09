@@ -655,6 +655,13 @@ const SQLResultsPanel = ({ generatedSql, warnings, isDbConnected, currentSchema,
                                                     </button>
 
                                                     <button
+                                                        onClick = {handleDownloadTXT}
+                                                        onKeyDown = {(e) => {
+                                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                                e.preventDefault();
+                                                                handleDownloadTXT();
+                                                            }
+                                                        }}
                                                         className = "w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 focus:bg-gray-100 dark:focus:bg-slate-700 focus:outline-none flex items-center space-x-2 transition-colors"
                                                         role = "menuitem"
                                                         tabIndex = {0}
