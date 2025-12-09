@@ -51,6 +51,8 @@ const AddDataModal = ({isOpen, onClose}) => {
 
     if (!tableName) {
       setTableMetadata(null);
+      setRows([]);
+      setValidationErrors({});
       return;
     }
 
@@ -146,7 +148,7 @@ const AddDataModal = ({isOpen, onClose}) => {
       }
     });
 
-    return error;
+    return errors;
   };
 
 
@@ -500,11 +502,146 @@ const AddDataModal = ({isOpen, onClose}) => {
               )}
 
 
-              {/* tab contents */}
-              {activeTab === 'manual' && selectedTable && (
-                <div className = "text-center py-8 text-gray-500 dark:text-gray-400">
-                  <p className = "text-sm">manual entry form later</p>
-                </div> 
+              {/* manual entry */}
+              {activeTab === 'manual' && selectedTable && tableMetadata && (
+                <div className = "space-y-4">
+
+                  <div className = "flex items-center justify-between">
+                    <div className = "flex items-center space-x-4">
+                      <span className = "text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {rows.length} row{rows.length !== 1 ? 's' : ''}
+                      </span>
+
+                      {Object.keys(validationErrors).length > 0 && (
+                        <span className = "text-sm text-red-600 dark:text-red-400 flex items-center space-x-1">
+                          <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                            <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+
+                          <span>{Object.keys(validationErrors).length} row{Object.keys(validationErrors).length !== 1 ? 's have' : ' has'} errors</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className = "flex items-center space-x-2">
+                      <button
+                        onClick = {handleAddRow}
+                        className = "px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center space-x-1"
+                      >
+                        <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                          <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M12 4v16m8-8H4" />
+                        </svg>
+
+                        <span>Add Row</span>
+                      </button>
+
+                      <button
+                        onClick = {handleClearAll}
+                        disabled = {rows.length === 0}
+                        className = "px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
+                      >
+                        <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                          <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+
+                        <span>Clear All</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* data entry */}
+                  <div className = "border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                    <div className = "overflow-x-auto max-h-96 overflow-y-auto">
+                      <table className = "w-full">
+
+                        <thead className = "bg-gray-100 dark:bg-slate-800 sticky top-0">
+                          <tr>
+                            <th className = "px-2 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 w-10">
+                              #
+                            </th>
+
+                            {tableMetadata.columns.map((col, idx) => (
+                              <th key = {idx} className = "px-3 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400">
+                                <div className = "flex items-center space-x-1">
+                                  <span>{col.name}</span>
+
+                                  {!col.nullable && !col.is_pk && (
+                                    <span className = "text-red-500" title = "Required">*</span>
+                                  )}
+
+                                  {col.is_pk && (
+                                    <span className = "text-purple-500 text-xs" title = "Primary Key">PK</span>
+                                  )}
+                                </div>
+
+                                <div className = "text-[10px] text-gray-500 dark:text-gray-500 font-normal font-mono mt-0.5">
+                                  {col.type}
+                                </div>
+                              </th>
+                            ))}
+                            <th className = "px-2 py-2 w-10"></th>
+                          </tr>
+                        </thead>
+
+                        <tbody className = "divide-y divide-gray-200 dark:divide-slate-700">
+                          {rows.map((row, rowIdx) => (
+                            <tr key = {rowIdx} className = "hover:bg-gray-50 dark:hover:bg-slate-800/50">
+                              <td className = "px-2 py-2 text-xs text-gray-500 dark:text-gray-500 text-center">
+                                {rowIdx + 1}
+                              </td>
+
+                              {tableMetadata.columns.map((col, colIdx) => (
+                                <td key = {colIdx} className = "px-3 py-2">
+                                  <div>
+                                    <input
+                                      type = "text"
+                                      value = {row[col.name] || ''}
+                                      onChange = {(e) => handleCellChange(rowIdx, col.name, e.target.value)}
+                                      placeholder = {getInputPlaceholder(col)}
+                                      disabled = {col.is_pk && (col.type.toLowerCase().includes('serial') || col.type.toLowerCase().includes('uuid'))}
+                                      className = {`w-full min-w-[150px] px-2 py-1.5 text-sm border rounded transition-colors ${
+                                        validationErrors[rowIdx]?.[col.name]
+                                          ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20'
+                                          : !col.nullable && !col.is_pk
+                                          ? 'border-yellow-300 dark:border-yellow-700 bg-white dark:bg-slate-900'
+                                          : 'border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-900'
+                                      } text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-100 dark:disabled:bg-slate-800`}
+                                    />
+                                    {validationErrors[rowIdx]?.[col.name] && (
+                                      <p className = "mt-1 text-xs text-red-600 dark:text-red-400">
+                                        {validationErrors[rowIdx][col.name]}
+                                      </p>
+                                    )}
+                                  </div>
+                                </td>
+                              ))}
+
+                              <td className = "px-2 py-2">
+                                <button
+                                  onClick = {() => handleDeleteRow(rowIdx)}
+                                  className = "p-1 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                                  title = "Delete row"
+                                >
+                                  <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Help text */}
+                  <div className = "bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-3">
+                    <p className = "text-xs text-blue-700 dark:text-blue-400">
+                      <strong>Tips:</strong> Leave fields empty for NULL values (if nullable). Fields marked with * are required. Primary keys marked as serial or UUID may be auto-generated.
+                    </p>
+                  </div>
+                </div>
               )}
 
               {activeTab === 'upload' && selectedTable && (
@@ -543,12 +680,38 @@ const AddDataModal = ({isOpen, onClose}) => {
               Cancel
             </button>
 
-            <button
-              disabled = {!selectedTable}
-              className = "px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Continue
-            </button>
+
+            {activeTab === 'manual' && selectedTable && rows.length > 0 ? (
+              <button
+                onClick = {() => {
+                  const isValid = validateAllRows();
+
+                  if (isValid) {
+                    setToast({ type: 'success', message: 'Validation passed! Insert functionality will be implemented in Phase 11.6' });
+                  } else {
+                    setToast({ type: 'error', message: 'Please fix validation errors before continuing' });
+                  }
+                }}
+                disabled = {rows.length === 0 || Object.keys(validationErrors).length > 0}
+                className = "px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              >
+                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                  <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M5 13l4 4L19 7" />
+                </svg>
+
+                <span>Insert {rows.length} Row{rows.length !== 1 ? 's' : ''}</span>
+              </button>
+
+            ) : (
+              <button
+                disabled = {!selectedTable}
+                className = "px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Continue
+              </button>
+            )}
+
+
           </div>
 
         </div>
