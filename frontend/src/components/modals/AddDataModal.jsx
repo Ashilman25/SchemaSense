@@ -15,6 +15,9 @@ const AddDataModal = ({isOpen, onClose}) => {
   const [hasDraftData, setHasDraftData] = useState(false);
   const [showCloseConfirmation, setShowCloseConfirmation] = useState(false);
 
+  const [rows, setRows] = useState([]);
+  const [validationErrors, setValidationErrors] = useState({});
+
   useEffect(() => {
     if (isOpen) {
       fetchTables();
@@ -55,8 +58,121 @@ const AddDataModal = ({isOpen, onClose}) => {
 
     if (table) {
       setTableMetadata(table);
+      initializeRows(table);
     }
   };
+
+
+
+  const initializeRows = (table) => {
+    const emptyRow = {};
+
+    table.columns.forEach(col => {
+      emptyRow[col.name] = '';
+    });
+
+    setRows([emptyRow]);
+    setValidationErrors({});
+    setHasDraftData(false);
+  };
+
+
+  //validation funcs
+  const validateValue = (value, column) => {
+    const type = column.type.toLowerCase();
+
+    if (value === '' || value === null || value === undefined) {
+      if (!column.nullable && !column.is_pk) {
+        return 'Required field';
+      }
+      return null;
+    }
+    
+    if (type.includes('int') || type.includes('serial')) {
+      if (!/^-?\d+$/.test(value)) {
+        return 'Must be an integer';
+      }
+
+    } else if (type.includes('numeric') || type.includes('decimal') || type.includes('float') || type.includes('double')) {
+      if (!/^-?\d+\.?\d*$/.test(value)) {
+        return 'Must be a number';
+      }
+
+    } else if (type.includes('bool')) {
+      const validBool = ['true', 'false', 't', 'f', '1', '0', 'yes', 'no', 'y', 'n'];
+      if (!validBool.includes(value.toLowerCase())) {
+        return 'Must be true/false, 1/0, yes/no, or y/n';
+      }
+
+    } else if (type.includes('date') && !type.includes('timestamp')) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return 'Must be YYYY-MM-DD format';
+      }
+
+    } else if (type.includes('timestamp') || type.includes('datetime')) {
+      if (!/^\d{4}-\d{2}-\d{2}/.test(value)) {
+        return 'Must start with YYYY-MM-DD';
+      }
+
+    } else if (type.includes('uuid')) {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+        return 'Must be a valid UUID (e.g., 123e4567-e89b-12d3-a456-426614174000)';
+      }
+
+    } else if (type.includes('json')) {
+      try {
+        JSON.parse(value);
+      } catch {
+        return 'Must be valid JSON';
+      }
+    }
+
+    return null; //valid
+  };
+
+
+  const validateRow = (rowIndex) => {
+    if (!tableMetadata) return {};
+
+    const row = rows[rowIndex];
+    const errors = {};
+
+    tableMetadata.columns.forEach(col => {
+      const value = row[col.name];
+      const error = validateValue(value, col);
+
+      if (error) {
+        errors[col.name] = error;
+      }
+    });
+
+    return error;
+  };
+
+
+  const validateAllRows = () => {
+    const allErrors = {};
+
+    rows.forEach((_, idx) => {
+      const rowErrors = validateRow(idx);
+
+      if (Object.keys(rowErrors).length > 0) {
+        allErrors[idx] = rowErrors;
+      }
+    });
+
+    setValidationErrors(allErrors);
+    return Object.keys(allErrors).length === 0;
+  };
+
+
+
+
+
+
+
+
+
 
 
   const handleClose = () => {
