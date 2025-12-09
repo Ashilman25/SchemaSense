@@ -450,7 +450,6 @@ const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess, currentConnection
                   <ul className = "list-disc list-inside space-y-1 text-xs">
                     <li>Not production-grade storage</li>
                     <li>May be temporary and cleaned up after inactivity</li>
-                    <li>Read-only from the app's perspective</li>
                   </ul>
                 </div>
 
