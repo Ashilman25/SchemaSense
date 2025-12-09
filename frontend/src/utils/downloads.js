@@ -145,8 +145,16 @@ function convertToTextTable(columns, rows) {
     headers.forEach((h, i) => {
         colWidths[i] = Math.max(colWidths[i], h.length);
     });
+    
+    dataRows.forEach(row => {
+        row.forEach((cell, i) => {
+            colWidths[i] = Math.max(colWidths[i], cell.length);
+        });
+    });
 
-    const padCell = (text, width) => text = ' '.repeat(Math.max(0, width - text.length));
+
+    const padCell = (text, width) => text + ' '.repeat(Math.max(0, width - text.length));
+
 
     const headerLine = headers.map((h, i) => padCell(h, colWidths[i])).join(' | ');
     const separatorLine = colWidths.map(w => '-'.repeat(w)).join('-+-');
@@ -155,6 +163,37 @@ function convertToTextTable(columns, rows) {
 
     return [headerLine, separatorLine, ...bodyLines].join('\n');
 
+}
+
+export function exportAsTXT(columns, rows, baseName = 'results', queryTitle = null) {
+    if (!columns || !rows || rows.length === 0) {
+        console.warn('No data to export');
+        return;
+    }
+
+    const filename = generateFilename(baseName, 'txt');
+    const title = queryTitle || 'SchemaSense Query Results';
+
+    const timestamp = new Date().toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+
+    const tableText = convertToTextTable(columns, rows);
+
+    const content = [
+        title,
+        `Generated: ${timestamp}`,
+        `Total Rows: ${rows.length}`,
+        '',
+        tableText,
+        ''
+    ].join('\n');
+
+    triggerDownload(content, filename, 'text/plain;charset=utf-8');
 }
 
 
