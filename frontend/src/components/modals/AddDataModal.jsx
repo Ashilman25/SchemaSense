@@ -115,6 +115,40 @@ const AddDataModal = ({isOpen, isClose}) => {
         </div>
 
 
+        {/* body */}
+        <div className = "flex-1 overflow-y-auto px-6 py-4">
+
+          {/* tabs */}
+          <div className = "flex space-x-1 border-b border-gray-200 dark:border-slate-700 mb-6">
+            <button
+              onClick = {() => setActiveTab('manual')}
+              className = {`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === 'manual'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                }`}
+            >
+              Manual Entry
+            </button>
+
+            <button
+              onClick = {() => setActiveTab('upload')}
+              className = {`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+                activeTab === 'upload'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                }`}
+            >
+              Upload File
+            </button>
+          </div>
+
+
+
+
+        </div>
+
+
 
 
       </div>
