@@ -1,6 +1,19 @@
-import {useState, useEffect, useCallback} from "react";
+import {useState, useEffect, useCallback, useRef} from "react";
 import { schemaAPI } from "../../utils/api";
 import ERDiagram from "../diagram/ERDiagram";
+
+export const FullScreen = (props) => (
+    <svg xmlns = "http://www.w3.org/2000/svg" width = "1em" height = "1em" viewBox = "0 0 48 48" {...props}>
+        <g fill = "none" stroke = "currentColor" strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = "4">
+            <path d = "M33 6H42V15"></path>
+            <path d = "M42 33V42H33"></path>
+            <path d = "M15 42H6V33"></path>
+            <path d = "M6 15V6H15"></path>
+        </g>
+    </svg>
+);
+
+const MIN_MODAL_PANEL_WIDTH = 320;
 
 const isProtectedTable = (table) => {
     if (!table) return false;
@@ -47,6 +60,14 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, o
     const [redoStack, setRedoStack] = useState([]);
     const [currentDdl, setCurrentDdl] = useState(null);
     const [isUndoRedoInProgress, setIsUndoRedoInProgress] = useState(false);
+    const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+
+    const [modalSplit, setModalSplit] = useState({ left: 50, right: 50 });
+    const [isModalHandleActive, setIsModalHandleActive] = useState(false);
+    const [isModalHandleHover, setIsModalHandleHover] = useState(false);
+
+    const modalContainerRef = useRef(null);
+    const modalDragStateRef = useRef(null);
 
     useEffect(() => {
         if (isDbConnected) {
@@ -409,6 +430,7 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, o
                                     <svg className = "w-3 h-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
                                         <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
+
                                     <span>Ask</span>
                                 </button>
                             </div>
@@ -454,6 +476,363 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, o
             </div>
         );
     };
+
+    const handleModalDrag = useCallback((event) => {
+        const dragState = modalDragStateRef.current;
+        if (!dragState || !modalContainerRef.current) return;
+
+        const deltaX = event.clientX - dragState.startX;
+        const containerWidth = dragState.containerWidth;
+
+        if (containerWidth <= MIN_MODAL_PANEL_WIDTH * 2) return;
+
+        const minLeft = MIN_MODAL_PANEL_WIDTH;
+        const maxLeft = containerWidth - MIN_MODAL_PANEL_WIDTH;
+
+        const nextLeft = dragState.leftPx + deltaX;
+        const newLeft = Math.min(Math.max(nextLeft, minLeft), maxLeft);
+        const newRight = containerWidth - newLeft;
+
+        setModalSplit({
+            left: (newLeft / containerWidth) * 100,
+            right: (newRight / containerWidth) * 100
+        });
+    }, [MIN_MODAL_PANEL_WIDTH]);
+
+    const stopModalDrag = useCallback(() => {
+        if (!modalDragStateRef.current) return;
+
+        document.removeEventListener('mousemove', handleModalDrag);
+        document.removeEventListener('mouseup', stopModalDrag);
+        document.body.style.userSelect = '';
+        modalDragStateRef.current = null;
+        setIsModalHandleActive(false);
+    }, [handleModalDrag]);
+
+    const startModalDrag = useCallback((event) => {
+        if (!modalContainerRef.current) return;
+        event.preventDefault();
+
+        const bounds = modalContainerRef.current.getBoundingClientRect();
+        const containerWidth = bounds.width;
+
+        if (containerWidth <= 0 || containerWidth <= MIN_MODAL_PANEL_WIDTH * 2) return;
+
+        const leftPx = (modalSplit.left / 100) * containerWidth;
+
+        modalDragStateRef.current = {
+            startX: event.clientX,
+            containerWidth,
+            leftPx
+        };
+
+        document.body.style.userSelect = 'none';
+        setIsModalHandleActive(true);
+
+        document.addEventListener('mousemove', handleModalDrag);
+        document.addEventListener('mouseup', stopModalDrag);
+
+    }, [handleModalDrag, modalSplit.left, stopModalDrag, MIN_MODAL_PANEL_WIDTH]);
+
+    const closeFullscreen = useCallback(() => {
+        stopModalDrag();
+        setIsModalHandleActive(false);
+        setIsModalHandleHover(false);
+        setIsFullscreenOpen(false);
+        
+    }, [stopModalDrag]);
+
+    const renderTablesContent = () => (
+        <div className = "flex flex-col h-full">
+            {isDbConnected && (
+                <div className = "space-y-3 mb-4 flex-none">
+                    <div className = "flex items-center justify-between">
+                        <h3 className = "text-sm font-medium text-gray-700 dark:text-gray-300">Schema Tables</h3>
+
+                        <button
+                            onClick={fetchSchema}
+                            disabled={loading}
+                            className = "text-xs bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {loading ? 'Refreshing...' : 'Refresh'}
+                        </button>
+                    </div>
+
+                    {/* Search box */}
+                    <div className = "relative">
+                        <svg className = "absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                            <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input
+                            type = "text"
+                            placeholder = "Search tables..."
+                            value = {searchTerm}
+                            onChange = {(e) => setSearchTerm(e.target.value)}
+                            className = "w-full pl-9 pr-3 py-2 text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500"
+                        />
+                        {searchTerm && (
+                            <button
+                                onClick = {() => setSearchTerm('')}
+                                className = "absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                            >
+                                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Table count */}
+                    {schema && schema.tables && (
+                        <div className = "text-xs text-gray-500 dark:text-gray-400 text-right">
+                            {searchTerm ? (
+                                <>
+                                    {getFilteredTables().length} of {schema.tables.length} table{schema.tables.length !== 1 ? 's' : ''}
+                                </>
+                            ) : (
+                                <>
+                                    {schema.tables.length} table{schema.tables.length !== 1 ? 's' : ''}
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            <div className = "flex-1 overflow-auto">
+                {renderTablesList()}
+            </div>
+        </div>
+    );
+
+    const renderERContent = () => (
+        <div className = "h-full flex flex-col">
+            {!isDbConnected ? (
+                <div className = "flex flex-col items-center justify-center h-full py-8 px-4 text-center">
+                    <svg className = "w-12 h-12 text-gray-400 dark:text-gray-500 mb-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                    </svg>
+                    <p className = "text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        No database connected
+                    </p>
+                    <p className = "text-xs text-gray-500 dark:text-gray-500">
+                        Click the settings icon in the top right to connect to a database
+                    </p>
+                </div>
+            ) : loading ? (
+                <div className = "flex items-center justify-center h-full">
+                    <div className = "text-sm text-gray-500 dark:text-gray-400">Loading ER diagram...</div>
+                </div>
+            ) : error ? (
+                <div className = "flex items-center justify-center h-full">
+                    <div className = "text-sm text-red-600 dark:text-red-400 p-3 bg-red-50 dark:bg-red-900/20 rounded">
+                        {error}
+                    </div>
+                </div>
+            ) : (
+                <>
+                    {/* diagram filters */}
+                    <div className = "space-y-2 mb-3 flex-none">
+
+                        {/* undo and redo buttons */}
+                        <div className = "flex items-center space-x-2">
+                            <button
+                                onClick = {handleUndo}
+                                disabled = {undoStack.length === 0 || isUndoRedoInProgress}
+                                className = "flex items-center space-x-1 px-3 py-1.5 text-xs bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-100 dark:disabled:hover:bg-slate-700"
+                                title = "Undo (Ctrl+Z)"
+                            >
+                                {isUndoRedoInProgress ? (
+                                    <svg className = "animate-spin w-4 h-4" fill = "none" viewBox = "0 0 24 24">
+                                        <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
+                                        <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                ) : (
+                                    <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                    </svg>
+                                )}
+
+                                <span>Undo</span>
+
+                                {undoStack.length > 0 && !isUndoRedoInProgress && (
+                                    <span className = "text-xs text-gray-500 dark:text-gray-400">({undoStack.length})</span>
+                                )}
+                            </button>
+
+                            <button
+                                onClick = {handleRedo}
+                                disabled = {redoStack.length === 0 || isUndoRedoInProgress}
+                                className = "flex items-center space-x-1 px-3 py-1.5 text-xs bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-100 dark:disabled:hover:bg-slate-700"
+                                title = "Redo (Ctrl+Y)"
+                            >
+                                {isUndoRedoInProgress ? (
+                                    <svg className = "animate-spin w-4 h-4" fill = "none" viewBox = "0 0 24 24">
+                                        <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
+                                        <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                ) : (
+                                    <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+                                    </svg>
+                                )}
+
+                                <span>Redo</span>
+
+                                {redoStack.length > 0 && !isUndoRedoInProgress && (
+                                    <span className = "text-xs text-gray-500 dark:text-gray-400">({redoStack.length})</span>
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Search box */}
+                        <div className = "relative">
+                            <svg className = "absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <input
+                                type = "text"
+                                placeholder = "Filter diagram..."
+                                value = {searchTerm}
+                                onChange = {(e) => setSearchTerm(e.target.value)}
+                                className = "w-full pl-9 pr-3 py-2 text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500"
+                            />
+                            {searchTerm && (
+                                <button
+                                    onClick = {() => setSearchTerm('')}
+                                    className = "absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                >
+                                    <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
+
+                        {/* table count */}
+                        {schema && schema.tables && (
+                            <div className = "text-xs text-gray-500 dark:text-gray-400 text-right">
+                                {searchTerm ? (
+                                    <>
+                                        {getFilteredTables().length} of {schema.tables.length} table{schema.tables.length !== 1 ? 's' : ''}
+                                    </>
+                                ) : (
+                                    <>
+                                        {schema.tables.length} table{schema.tables.length !== 1 ? 's' : ''}
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className = "flex-1 min-h-0">
+                        <ERDiagram
+                            schema = {getFilteredSchema()}
+                            onAskAboutTable = {onAskAboutTable}
+                            onSchemaUpdate = {handleSchemaUpdate}
+                            isDbConnected = {isDbConnected}
+                        />
+                    </div>
+                </>
+            )}
+        </div>
+    );
+
+    const renderFullscreenModal = () => {
+        if (!isFullscreenOpen) return null;
+
+        return (
+            <div
+                className = "fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+                onClick = {closeFullscreen}
+            >
+                <div
+                    className = "relative w-[90vw] h-[90vh] max-w-7xl max-h-[90vh] bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-2xl shadow-2xl p-4 flex flex-col overflow-hidden"
+                    onClick = {(e) => e.stopPropagation()}
+                >
+                    <div className = "flex items-center justify-between mb-4">
+                        <div>
+                            <p className = "text-sm font-semibold text-gray-800 dark:text-gray-200">Schema Explorer</p>
+                            <p className = "text-xs text-gray-500 dark:text-gray-400">Tables & ER Diagram</p>
+                        </div>
+
+                        <button
+                            onClick = {closeFullscreen}
+                            className = "inline-flex items-center space-x-2 px-3 py-1.5 text-sm rounded-md bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                            aria-label = "Close fullscreen schema explorer"
+                        >
+                            <span>Exit fullscreen</span>
+                            <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div
+                        ref = {modalContainerRef}
+                        className = "flex-1 min-h-0 flex overflow-hidden rounded-xl bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700"
+                    >
+                        <div
+                            className = "flex flex-col h-full min-w-[320px] overflow-hidden"
+                            style = {{flexBasis: `${modalSplit.left}%`, flexGrow: 0, flexShrink: 0}}
+                        >
+                            <div className = "h-full overflow-auto p-4">
+                                {renderTablesContent()}
+                            </div>
+                        </div>
+
+                        <div
+                            className = {`relative h-full w-2.5 cursor-col-resize transition-colors ${isModalHandleActive ? 'bg-blue-500/20' : isModalHandleHover ? 'bg-blue-500/10' : 'bg-gray-200/70 dark:bg-slate-700/70'}`}
+                            onMouseDown = {startModalDrag}
+                            onMouseEnter = {() => setIsModalHandleHover(true)}
+                            onMouseLeave = {() => setIsModalHandleHover(false)}
+                        >
+                            <span className = "absolute inset-y-2 left-1/2 w-px bg-gray-300 dark:bg-slate-600 transform -translate-x-1/2" />
+                        </div>
+
+                        <div
+                            className = "flex flex-col h-full min-w-[320px] overflow-hidden"
+                            style = {{flexBasis: `${modalSplit.right}%`, flexGrow: 0, flexShrink: 0}}
+                        >
+                            <div className = "h-full overflow-auto p-4">
+                                {renderERContent()}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    useEffect(() => {
+        if (!isFullscreenOpen) {
+            stopModalDrag();
+            return;
+        }
+
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                closeFullscreen();
+            }
+        };
+
+        const originalOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        document.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+            document.body.style.overflow = originalOverflow;
+            stopModalDrag();
+        };
+    }, [isFullscreenOpen, closeFullscreen, stopModalDrag]);
+
+    useEffect(() => {
+        return () => {
+            stopModalDrag();
+        };
+    }, [stopModalDrag]);
 
     return (
         <div className = "h-full bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 flex flex-col transition-colors relative">
@@ -506,224 +885,45 @@ const SchemaExplorerPanel = ({ onAskAboutTable, isDbConnected, refreshTrigger, o
 
             {/* tabs */}
             <div className = {`border-b border-gray-200 dark:border-slate-700 transition-all ${notification ? 'pt-14' : ''}`}>
-                <div className = "flex space-x-1 px-4">
-                    <button
-                        onClick = {() => setActiveTab('tables')}
-                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                            activeTab === 'tables' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
-                        }`}
-                    >
-                        Tables
-                    </button>
+                <div className = "flex items-center justify-between px-4">
+                    <div className = "flex space-x-1">
+                        <button
+                            onClick = {() => setActiveTab('tables')}
+                            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                                activeTab === 'tables' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                            }`}
+                        >
+                            Tables
+                        </button>
+
+                        <button
+                            onClick = {() => setActiveTab('er')}
+                            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                                activeTab === 'er' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                            }`}
+                        >
+                            ER Diagram
+                        </button>
+                    </div>
 
                     <button
-                        onClick = {() => setActiveTab('er')}
-                        className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                            activeTab === 'er' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
-                        }`}
+                        type = "button"
+                        onClick = {() => setIsFullscreenOpen(true)}
+                        className = "inline-flex items-center justify-center p-2 text-black dark:text-white hover:text-gray-700 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-slate-700/60 rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        aria-label = "Open schema explorer in fullscreen"
+                        title = "Open fullscreen"
                     >
-                        ER Diagram
+                        <FullScreen className = "w-5 h-5" />
                     </button>
                 </div>
             </div>
 
             {/* tab content */}
             <div className = "flex-1 p-4 overflow-auto">
-                {activeTab === 'tables' && (
-                    <div>
-                        {isDbConnected && (
-                            <div className = "space-y-3 mb-4">
-                                <div className = "flex items-center justify-between">
-                                    <h3 className = "text-sm font-medium text-gray-700 dark:text-gray-300">Schema Tables</h3>
-
-                                    <button
-                                        onClick={fetchSchema}
-                                        disabled={loading}
-                                        className = "text-xs bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 px-3 py-1 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {loading ? 'Refreshing...' : 'Refresh'}
-                                    </button>
-                                </div>
-
-                                {/* Search box */}
-                                <div className = "relative">
-                                    <svg className = "absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
-                                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                    </svg>
-                                    <input
-                                        type = "text"
-                                        placeholder = "Search tables..."
-                                        value = {searchTerm}
-                                        onChange = {(e) => setSearchTerm(e.target.value)}
-                                        className = "w-full pl-9 pr-3 py-2 text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500"
-                                    />
-                                    {searchTerm && (
-                                        <button
-                                            onClick = {() => setSearchTerm('')}
-                                            className = "absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                                        >
-                                            <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
-                                                <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    )}
-                                </div>
-
-                                {/* Table count */}
-                                {schema && schema.tables && (
-                                    <div className = "text-xs text-gray-500 dark:text-gray-400 text-right">
-                                        {searchTerm ? (
-                                            <>
-                                                {getFilteredTables().length} of {schema.tables.length} table{schema.tables.length !== 1 ? 's' : ''}
-                                            </>
-                                        ) : (
-                                            <>
-                                                {schema.tables.length} table{schema.tables.length !== 1 ? 's' : ''}
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {renderTablesList()}
-                    </div>
-                )}
-
-                {activeTab === 'er' && (
-                    <div className = "h-full flex flex-col">
-                        {!isDbConnected ? (
-                            <div className = "flex flex-col items-center justify-center h-full py-8 px-4 text-center">
-                                <svg className = "w-12 h-12 text-gray-400 dark:text-gray-500 mb-3" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
-                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-                                </svg>
-                                <p className = "text-sm text-gray-600 dark:text-gray-400 mb-2">
-                                    No database connected
-                                </p>
-                                <p className = "text-xs text-gray-500 dark:text-gray-500">
-                                    Click the settings icon in the top right to connect to a database
-                                </p>
-                            </div>
-                        ) : loading ? (
-                            <div className = "flex items-center justify-center h-full">
-                                <div className = "text-sm text-gray-500 dark:text-gray-400">Loading ER diagram...</div>
-                            </div>
-                        ) : error ? (
-                            <div className = "flex items-center justify-center h-full">
-                                <div className = "text-sm text-red-600 dark:text-red-400 p-3 bg-red-50 dark:bg-red-900/20 rounded">
-                                    {error}
-                                </div>
-                            </div>
-                        ) : (
-                            <>
-                                {/* diagram filters */}
-                                <div className = "space-y-2 mb-3">
-
-                                    {/* undo and redo buttons */}
-                                    <div className = "flex items-center space-x-2">
-                                        <button
-                                            onClick = {handleUndo}
-                                            disabled = {undoStack.length === 0 || isUndoRedoInProgress}
-                                            className = "flex items-center space-x-1 px-3 py-1.5 text-xs bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-100 dark:disabled:hover:bg-slate-700"
-                                            title = "Undo (Ctrl+Z)"
-                                        >
-                                            {isUndoRedoInProgress ? (
-                                                <svg className = "animate-spin w-4 h-4" fill = "none" viewBox = "0 0 24 24">
-                                                    <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
-                                                    <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                </svg>
-                                            ) : (
-                                                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
-                                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                                </svg>
-                                            )}
-
-                                            <span>Undo</span>
-
-                                            {undoStack.length > 0 && !isUndoRedoInProgress && (
-                                                <span className = "text-xs text-gray-500 dark:text-gray-400">({undoStack.length})</span>
-                                            )}
-                                        </button>
-
-                                        <button
-                                            onClick = {handleRedo}
-                                            disabled = {redoStack.length === 0 || isUndoRedoInProgress}
-                                            className = "flex items-center space-x-1 px-3 py-1.5 text-xs bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-100 dark:disabled:hover:bg-slate-700"
-                                            title = "Redo (Ctrl+Y)"
-                                        >
-                                            {isUndoRedoInProgress ? (
-                                                <svg className = "animate-spin w-4 h-4" fill = "none" viewBox = "0 0 24 24">
-                                                    <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
-                                                    <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                </svg>
-                                            ) : (
-                                                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
-                                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth={2} d = "M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
-                                                </svg>
-                                            )}
-
-                                            <span>Redo</span>
-
-                                            {redoStack.length > 0 && !isUndoRedoInProgress && (
-                                                <span className = "text-xs text-gray-500 dark:text-gray-400">({redoStack.length})</span>
-                                            )}
-                                        </button>
-                                    </div>
-
-                                    {/* Search box */}
-                                    <div className = "relative">
-                                        <svg className = "absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
-                                            <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                        </svg>
-                                        <input
-                                            type = "text"
-                                            placeholder = "Filter diagram..."
-                                            value = {searchTerm}
-                                            onChange = {(e) => setSearchTerm(e.target.value)}
-                                            className = "w-full pl-9 pr-3 py-2 text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-500"
-                                        />
-                                        {searchTerm && (
-                                            <button
-                                                onClick = {() => setSearchTerm('')}
-                                                className = "absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                                            >
-                                                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
-                                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    {/* table count */}
-                                    {schema && schema.tables && (
-                                        <div className = "text-xs text-gray-500 dark:text-gray-400 text-right">
-                                            {searchTerm ? (
-                                                <>
-                                                    {getFilteredTables().length} of {schema.tables.length} table{schema.tables.length !== 1 ? 's' : ''}
-                                                </>
-                                            ) : (
-                                                <>
-                                                    {schema.tables.length} table{schema.tables.length !== 1 ? 's' : ''}
-                                                </>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className = "flex-1 min-h-0">
-                                    <ERDiagram
-                                        schema = {getFilteredSchema()}
-                                        onAskAboutTable = {onAskAboutTable}
-                                        onSchemaUpdate = {handleSchemaUpdate}
-                                        isDbConnected = {isDbConnected}
-                                    />
-                                </div>
-                            </>
-                        )}
-                    </div>
-                )}
-
+                {activeTab === 'tables' ? renderTablesContent() : renderERContent()}
             </div>
+
+            {renderFullscreenModal()}
         </div>
     )
 

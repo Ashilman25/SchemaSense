@@ -121,6 +121,84 @@ export function exportAsCSV(columns, rows, baseName = 'results') {
 }
 
 
+
+
+function convertToTextTable(columns, rows) {
+    if (!columns || !rows) {
+        return '';
+    }
+
+    const headers = columns.map(col => (col == null ? '' : String(col)));
+
+    const dataRows = rows.map(row => 
+        row.map(cell => {
+            if (cell === null || cell === undefined) {
+                return 'NULL';
+            }
+            return String(cell);
+        })
+    );
+
+    const colCount = headers.length;
+    const colWidths = new Array(colCount).fill(0);
+
+    headers.forEach((h, i) => {
+        colWidths[i] = Math.max(colWidths[i], h.length);
+    });
+    
+    dataRows.forEach(row => {
+        row.forEach((cell, i) => {
+            colWidths[i] = Math.max(colWidths[i], cell.length);
+        });
+    });
+
+
+    const padCell = (text, width) => text + ' '.repeat(Math.max(0, width - text.length));
+
+
+    const headerLine = headers.map((h, i) => padCell(h, colWidths[i])).join(' | ');
+    const separatorLine = colWidths.map(w => '-'.repeat(w)).join('-+-');
+
+    const bodyLines = dataRows.map(row => row.map((cell, i) => padCell(cell, colWidths[i])).join(' | '));
+
+    return [headerLine, separatorLine, ...bodyLines].join('\n');
+
+}
+
+export function exportAsTXT(columns, rows, baseName = 'results', queryTitle = null) {
+    if (!columns || !rows || rows.length === 0) {
+        console.warn('No data to export');
+        return;
+    }
+
+    const filename = generateFilename(baseName, 'txt');
+    const title = queryTitle || 'SchemaSense Query Results';
+
+    const timestamp = new Date().toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+
+    const tableText = convertToTextTable(columns, rows);
+
+    const content = [
+        title,
+        `Generated: ${timestamp}`,
+        `Total Rows: ${rows.length}`,
+        '',
+        tableText,
+        ''
+    ].join('\n');
+
+    triggerDownload(content, filename, 'text/plain;charset=utf-8');
+}
+
+
+
+
 export async function exportAsPDF(columns, rows, baseName = 'results', queryTitle = null) {
     try {
         if (!columns || !rows || rows.length === 0) {
