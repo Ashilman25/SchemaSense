@@ -105,3 +105,68 @@ export const parseCSV = (content) => {
   }
 };
 
+
+
+export const parseJSON = (content) => {
+  try {
+    const data = JSON.parse(content);
+
+    if (!Array.isArray(data)) {
+      throw new Error('JSON must be an array of objects');
+    }
+
+    if (data.length === 0) {
+      throw new Error('JSON array is empty');
+    }
+
+    const invalidItems = data.filter(item => typeof item !== 'object' || item === null || Array.isArray(item));
+    if (invalidItems.length > 0) {
+      throw new Error('All items in the JSON array must be objects');
+    }
+
+    const allKeys = new Set();
+    data.forEach(item => {
+      Object.keys(item).forEach(key => allKeys.add(key));
+    });
+
+    const headers = Array.from(allKeys);
+    if (headers.length === 0) {
+      throw new Error('No keys found in JSON objects');
+    }
+
+    const maxRows = Math.min(data.length, MAX_ROWS);
+    const rows = data.slice(0, maxRows).map(item => {
+      const row = {};
+
+      headers.forEach(key => {
+        row[key] = (value === undefined || value === '' || value === null) ? null : value;
+      });
+
+      return row;
+    });
+
+    const totalRows = data.length;
+    const truncated = totalRows > MAX_ROWS;
+
+    return {
+      success: true,
+      headers,
+      rows,
+      totalRows,
+      parsedRows: rows.length,
+      truncated,
+      message: truncated ? `File contains ${totalRows} rows, showing first ${MAX_ROWS}` : null
+    };
+
+
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || 'Failed to parse JSON file'
+    };
+  }
+};
+
+
+
+//VALIDATORS
