@@ -170,3 +170,29 @@ export const parseJSON = (content) => {
 
 
 //VALIDATORS
+export const validateFileSize = (file) => {
+  if (file.size > MAX_FILE_SIZE) {
+    return {
+      valid: false,
+      error: `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds maximum allowed size (${MAX_FILE_SIZE / 1024 / 1024}MB)`
+    };
+  }
+
+  return {valid: true};
+}
+
+
+export const validateFileType = (file) => {
+  const validExtensions = ['.csv', '.json'];
+  const fileName = file.name.toLowerCase();
+  const isValid = validExtensions.some(ext => fileName.endsWith(ext));
+
+  if (!isValid) {
+    return {
+      valid: false,
+      error: 'Only .csv and .json files are supported'
+    };
+  }
+
+  return {valid: true};
+};
