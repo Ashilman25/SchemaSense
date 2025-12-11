@@ -131,7 +131,7 @@ async def insert_data(request: InsertDataRequest):
                 
             raise HTTPException(
                 status_code = 400,
-                detail = f"Database errors: {error_detail}"
+                detail = f"Database error: {error_detail}"
             )
             
         except Exception as e:
@@ -153,4 +153,90 @@ async def insert_data(request: InsertDataRequest):
         raise HTTPException(
             status_code = 500,
             detail = f"Failed to insert data: {str(e)}"
+        )
+        
+        
+        
+        
+        
+        
+@router.post("/preview")
+async def preview_data(request: InsertDataRequest):
+    try:
+        parts = request.table.split('.')
+        if len(parts) != 2:
+            raise HTTPException(
+                status_code = 400,
+                detail = "Table name must be in format 'schema.table'"
+            )
+            
+        schema_name, table_name = parts
+        
+        conn = get_connection()
+        if not conn:
+            raise HTTPException(
+                status_code = 500,
+                detail = "Database connection not configured"
+            )
+            
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                           SELECT column_name, data_type, is_nullable
+                           FROM information_schema.columns
+                           WHERE table_schema = %s AND table_name = %s
+                           ORDER BY ordinal_position
+                           """, (schema_name, table_name))
+            table_columns = cursor.fetchall()
+            
+            if not table_columns:
+                raise HTTPException(
+                    status_code = 404,
+                    detail = f"Table {request.table} does not exist"
+                )
+                
+            column_info = {
+                col[0] : {
+                    'data_type' : col[1],
+                    'is_nullable' : col[2] == 'YES'
+                }
+                for col in table_columns
+            }
+            
+            if request.rows:
+                first_row = request.rows[0]
+                request_columns = set(first_row.keys())
+                table_column_names = set(column_info.keys())
+                
+                extra_columns = request_columns - table_column_names
+                
+                return {
+                    'valid' : len(extra_columns) == 0,
+                    'table_columns' : column_info,
+                    'extra_columns' : list(extra_columns) if extra_columns else [],
+                    'row_count' : len(request.rows)
+                }
+                
+            return {
+                'valid' : True,
+                'table_columns' : column_info,
+                'extra_columns' : [],
+                'row_count' : 0
+            }
+        
+        
+        finally:
+            cursor.close()
+            conn.close()
+    
+    
+    
+    except HTTPException:
+        raise
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code = 500,
+            detail = f"Failed to preview data: {str(e)}"
         )
