@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import config, history, nl, schema, sql, db_provision
+from app.routes import config, history, nl, schema, sql, db_provision, data
 
 #python -m uvicorn app.main:app --reload
 
@@ -37,6 +37,7 @@ app.include_router(sql.router)
 app.include_router(nl.router)
 app.include_router(history.router)
 app.include_router(db_provision.router)
+app.include_router(data.router)
 
 
 @app.get("/api/health")
