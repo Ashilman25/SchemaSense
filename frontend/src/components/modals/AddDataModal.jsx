@@ -1,6 +1,17 @@
-import {useState, useEffect} from 'react';
+import {useState, useEffect, useRef} from 'react';
 import { schemaAPI } from '../../utils/api';
 import Toast from '../common/Toast';
+import {
+  parseCSV,
+  parseJSON,
+  validateFileSize,
+  validateFileType,
+  autoMatchColumns,
+  validateColumnMapping,
+  applyColumnMapping,
+  MAX_FILE_SIZE,
+  MAX_ROWS
+} from '../../utils/fileParser';
 
 const AddDataModal = ({isOpen, onClose}) => {
   const [activeTab, setActiveTab] = useState('manual');
@@ -17,6 +28,15 @@ const AddDataModal = ({isOpen, onClose}) => {
 
   const [rows, setRows] = useState([]);
   const [validationErrors, setValidationErrors] = useState({});
+
+
+  const fileInputRef = useRef(null);
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [uploadStep, setUploadStep] = useState('select'); // select, mapping, preview
+  const [parsedData, setParsedData] = useState(null);
+  const [columnMapping, setColumnMapping] = useState({});
+  const [mappingValidation, setMappingValidation] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -274,6 +294,17 @@ const AddDataModal = ({isOpen, onClose}) => {
     setError('');
     setHasDraftData(false);
     setShowCloseConfirmation(false);
+
+    setUploadedFile(null);
+    setParsedData(null);
+    setColumnMapping({});
+    setMappingValidation(null);
+    setUploadStep('select');
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
     onClose();
   };
 
@@ -283,6 +314,160 @@ const AddDataModal = ({isOpen, onClose}) => {
 
   const cancelClose = () => {
     setShowCloseConfirmation(false);
+  };
+
+  // File upload handlers
+  const handleFileSelect = (file) => {
+    if (!file) return;
+
+    //validate file type
+    const typeValidation = validateFileType(file);
+    if (!typeValidation.valid) {
+      setError(typeValidation.error);
+      return;
+    }
+
+    //validate file size
+    const sizeValidation = validateFileSize(file);
+    if (!sizeValidation.valid) {
+      setError(sizeValidation.error);
+      return;
+    }
+
+    setUploadedFile(file);
+    setError('');
+    setLoading(true);
+
+    // read and parse 
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target.result;
+      parseFile(file, content);
+    };
+
+    reader.onerror = () => {
+      setError('Failed to read file');
+      setLoading(false);
+    };
+
+    reader.readAsText(file);
+  };
+
+  const parseFile = (file, content) => {
+    const fileName = file.name.toLowerCase();
+    let result;
+
+    if (fileName.endsWith('.csv')) {
+      result = parseCSV(content);
+
+    } else if (fileName.endsWith('.json')) {
+      result = parseJSON(content);
+
+    } else {
+      setError('Unsupported file type');
+      setLoading(false);
+      return;
+    }
+
+    setLoading(false);
+
+    if (!result.success) {
+      setError(result.error);
+      setParsedData(null);
+      return;
+    }
+
+    //show info msg if truncated
+    if (result.message) {
+      setToast({ type: 'info', message: result.message });
+    }
+
+    setParsedData(result);
+
+    //auto match cols
+    if (tableMetadata) {
+      const mapping = autoMatchColumns(result.headers, tableMetadata.columns);
+      setColumnMapping(mapping);
+
+      const validation = validateColumnMapping(mapping, tableMetadata.columns);
+      setMappingValidation(validation);
+
+      setUploadStep('mapping');
+
+    } else {
+      setUploadStep('mapping');
+    }
+  };
+
+  const handleFileInputChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleColumnMappingChange = (uploadedColumn, tableColumn) => {
+    const newMapping = {
+      ...columnMapping,
+      [uploadedColumn]: tableColumn === '' ? null : tableColumn
+    };
+
+    setColumnMapping(newMapping);
+
+    const validation = validateColumnMapping(newMapping, tableMetadata.columns);
+    setMappingValidation(validation);
+  };
+
+  const handleApplyMapping = () => {
+    if (!mappingValidation?.valid) {
+      setToast({ type: 'error', message: 'Please fix mapping errors before continuing' });
+      return;
+    }
+
+    const mappedRows = applyColumnMapping(parsedData.rows, columnMapping, tableMetadata.columns);
+    setRows(mappedRows);
+    setHasDraftData(true);
+
+    setActiveTab('manual');
+    setUploadStep('preview');
+
+    setToast({
+      type: 'success',
+      message: `Successfully imported ${mappedRows.length} rows. Review and insert when ready.`
+    });
+  };
+
+  const handleResetUpload = () => {
+    setUploadedFile(null);
+    setParsedData(null);
+    setColumnMapping({});
+    setMappingValidation(null);
+    setUploadStep('select');
+    setError('');
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   if (!isOpen) return null;
@@ -644,9 +829,256 @@ const AddDataModal = ({isOpen, onClose}) => {
                 </div>
               )}
 
-              {activeTab === 'upload' && selectedTable && (
-                <div className = "text-center py-8 text-gray-500 dark:text-gray-400">
-                  <p className = "text-sm">file upload later</p>
+              {activeTab === 'upload' && selectedTable && tableMetadata && (
+                <div className = "space-y-4">
+
+                  {uploadStep === 'select' && (
+                    <>
+                      {/* file dropzone */}
+                      <div
+                        onDragOver = {handleDragOver}
+                        onDragLeave = {handleDragLeave}
+                        onDrop = {handleDrop}
+                        className = {`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                          isDragging
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                            : 'border-gray-300 dark:border-slate-600 hover:border-blue-400 dark:hover:border-blue-500'
+                        }`}
+                      >
+                        <div className = "flex flex-col items-center space-y-4">
+                          <svg className = "w-12 h-12 text-gray-400 dark:text-gray-500" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                            <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+
+                          <div>
+                            <p className = "text-sm text-gray-700 dark:text-gray-300 mb-1">
+                              Drag and drop your file here, or
+                            </p>
+
+                            <button
+                              onClick = {() => fileInputRef.current?.click()}
+                              className = "text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
+                            >
+                              browse to upload
+                            </button>
+
+                            <input
+                              ref = {fileInputRef}
+                              type = "file"
+                              accept = ".csv,.json"
+                              onChange = {handleFileInputChange}
+                              className = "hidden"
+                            />
+                          </div>
+
+                          <div className = "text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                            <p>Supported formats: CSV, JSON</p>
+                            <p>Maximum file size: {MAX_FILE_SIZE / 1024 / 1024}MB</p>
+                            <p>Maximum rows: {MAX_ROWS.toLocaleString()}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* file format info */}
+                      <div className = "bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                        <h4 className = "text-sm font-semibold text-blue-800 dark:text-blue-300 mb-2">
+                          File Format Guidelines
+                        </h4>
+
+                        <div className = "text-xs text-blue-700 dark:text-blue-400 space-y-2">
+                          <div>
+                            <strong>CSV:</strong>
+                            <ul className = "list-disc list-inside ml-2 mt-1 space-y-0.5">
+                              <li>First row should contain column headers</li>
+                              <li>Comma, semicolon, tab, or pipe delimiters are auto-detected</li>
+                              <li>Use quotes for values containing commas or line breaks</li>
+                              <li>Empty cells will be treated as NULL</li>
+                            </ul>
+                          </div>
+
+                          <div>
+                            <strong>JSON:</strong>
+                            <ul className = "list-disc list-inside ml-2 mt-1 space-y-0.5">
+                              <li>Must be an array of objects</li>
+                              <li>Each object represents one row</li>
+                              <li>Object keys should match column names</li>
+                              <li>Example: {`[{"id": 1, "name": "John"}, {"id": 2, "name": "Jane"}]`}</li>
+                            </ul>
+                          </div>
+
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {uploadStep === 'mapping' && parsedData && (
+                    <>
+                      {/* column mapping */}
+                      <div className = "space-y-4">
+                        <div className = "flex items-center justify-between">
+                          <div>
+                            <h3 className = "text-sm font-semibold text-gray-700 dark:text-gray-300">
+                              Map Columns
+                            </h3>
+
+                            <p className = "text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              Match uploaded columns to table columns ({parsedData.parsedRows} rows loaded)
+                            </p>
+                          </div>
+
+                          <button
+                            onClick = {handleResetUpload}
+                            className = "text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 flex items-center space-x-1"
+                          >
+                            <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                              <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M6 18L18 6M6 6l12 12" />
+                            </svg>
+
+                            <span>Clear</span>
+                          </button>
+                        </div>
+
+                        {/* mapping table */}
+                        <div className = "border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                          <table className = "w-full">
+                            <thead className = "bg-gray-100 dark:bg-slate-800">
+                              <tr>
+                                <th className = "px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">
+                                  Uploaded Column
+                                </th>
+
+                                <th className = "px-4 py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-400">
+                                  →
+                                </th>
+
+                                <th className = "px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">
+                                  Table Column
+                                </th>
+
+                                <th className = "px-4 py-2 text-left text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase">
+                                  Sample Value
+                                </th>
+                              </tr>
+                            </thead>
+
+                            <tbody className = "divide-y divide-gray-200 dark:divide-slate-700">
+                              {parsedData.headers.map((uploadedCol, idx) => {
+                                const sampleValue = parsedData.rows[0]?.[uploadedCol];
+                                const mappedCol = columnMapping[uploadedCol];
+                                const isUnmapped = mappedCol === null;
+
+                                return (
+                                  <tr key = {idx} className = {`hover:bg-gray-50 dark:hover:bg-slate-800/50 ${isUnmapped ? 'opacity-60' : ''}`}>
+                                    <td className = "px-4 py-2 text-sm text-gray-900 dark:text-gray-100 font-medium">
+                                      {uploadedCol}
+                                    </td>
+
+                                    <td className = "px-4 py-2 text-center">
+                                      <svg className = "w-4 h-4 text-gray-400 mx-auto" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                        <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M13 7l5 5m0 0l-5 5m5-5H6" />
+                                      </svg>
+                                    </td>
+
+                                    <td className = "px-4 py-2">
+                                      <select
+                                        value = {mappedCol || ''}
+                                        onChange = {(e) => handleColumnMappingChange(uploadedCol, e.target.value)}
+                                        className = "w-full px-2 py-1 text-sm border border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                      >
+                                        <option value = "">-- Skip this column --</option>
+
+                                        {tableMetadata.columns.map((col) => (
+                                          <option key = {col.name} value = {col.name}>
+                                            {col.name} ({col.type})
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </td>
+
+                                    <td className = "px-4 py-2 text-xs text-gray-500 dark:text-gray-400 font-mono max-w-xs truncate">
+                                      {sampleValue !== null && sampleValue !== undefined ? String(sampleValue) : <span className = "italic">null</span>}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* validation msgs */}
+                        {mappingValidation && (
+                          <div className = "space-y-2">
+                            {mappingValidation.errors.length > 0 && (
+                              <div className = "px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                                <div className = "flex items-start space-x-2">
+                                  <svg className = "w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+
+                                  <div className = "flex-1">
+                                    <p className = "text-sm font-medium text-red-800 dark:text-red-300 mb-1">
+                                      Mapping Errors
+                                    </p>
+
+                                    <ul className = "text-xs text-red-700 dark:text-red-400 space-y-0.5 list-disc list-inside">
+                                      {mappingValidation.errors.map((err, idx) => (
+                                        <li key = {idx}>{err}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {mappingValidation.warnings.length > 0 && (
+                              <div className = "px-4 py-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                                <div className = "flex items-start space-x-2">
+                                  <svg className = "w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                                    <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                  </svg>
+
+                                  <div className = "flex-1">
+                                    <p className = "text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-1">
+                                      Warnings
+                                    </p>
+
+                                    <ul className = "text-xs text-yellow-700 dark:text-yellow-400 space-y-0.5 list-disc list-inside">
+                                      {mappingValidation.warnings.map((warn, idx) => (
+                                        <li key = {idx}>{warn}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* apply button */}
+                        <div className = "flex justify-end space-x-3">
+                          <button
+                            onClick = {handleResetUpload}
+                            className = "px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded-lg transition-colors text-sm"
+                          >
+                            Cancel
+                          </button>
+
+                          <button
+                            onClick = {handleApplyMapping}
+                            disabled = {!mappingValidation?.valid}
+                            className = "px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center space-x-2"
+                          >
+                            <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                              <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M5 13l4 4L19 7" />
+                            </svg>
+
+                            <span>Apply & Preview ({parsedData.parsedRows} rows)</span>
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
