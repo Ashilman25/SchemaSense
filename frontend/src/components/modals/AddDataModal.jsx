@@ -1,5 +1,5 @@
 import {useState, useEffect, useRef} from 'react';
-import { schemaAPI } from '../../utils/api';
+import { schemaAPI, dataAPI } from '../../utils/api';
 import Toast from '../common/Toast';
 import {
   parseCSV,
@@ -25,6 +25,8 @@ const AddDataModal = ({isOpen, onClose}) => {
 
   const [hasDraftData, setHasDraftData] = useState(false);
   const [showCloseConfirmation, setShowCloseConfirmation] = useState(false);
+  const [showInsertConfirmation, setShowInsertConfirmation] = useState(false);
+  const [isInserting, setIsInserting] = useState(false);
 
   const [rows, setRows] = useState([]);
   const [validationErrors, setValidationErrors] = useState({});
@@ -175,6 +177,7 @@ const AddDataModal = ({isOpen, onClose}) => {
   const validateAllRows = () => {
     const allErrors = {};
 
+    // First, validate each row individually
     rows.forEach((_, idx) => {
       const rowErrors = validateRow(idx);
 
@@ -182,6 +185,42 @@ const AddDataModal = ({isOpen, onClose}) => {
         allErrors[idx] = rowErrors;
       }
     });
+
+    if (tableMetadata) {
+      const pkColumns = tableMetadata.columns.filter(col => col.is_pk);
+
+      pkColumns.forEach(pkCol => {
+        const valueMap = new Map();
+
+        rows.forEach((row, idx) => {
+          const value = row[pkCol.name];
+
+          if (value === '' || value === null || value === undefined) {
+            return;
+          }
+
+          const normalizedValue = typeof value === 'string' ? value.trim() : value;
+
+          if (!valueMap.has(normalizedValue)) {
+            valueMap.set(normalizedValue, []);
+          }
+
+          valueMap.get(normalizedValue).push(idx);
+        });
+
+        valueMap.forEach((indices, value) => {
+          if (indices.length > 1) {
+            indices.forEach(idx => {
+
+              if (!allErrors[idx]) {
+                allErrors[idx] = {};
+              }
+              allErrors[idx][pkCol.name] = `Duplicate primary key value "${value}" found in rows ${indices.map(i => i + 1).join(', ')}`;
+            });
+          }
+        });
+      });
+    }
 
     setValidationErrors(allErrors);
     return Object.keys(allErrors).length === 0;
@@ -470,6 +509,74 @@ const AddDataModal = ({isOpen, onClose}) => {
     }
   };
 
+  const handleInsertClick = () => {
+    const isValid = validateAllRows();
+
+    if (!isValid) {
+      setToast({ type: 'error', message: 'Please fix validation errors before inserting' });
+      return;
+    }
+    setShowInsertConfirmation(true);
+  };
+
+  const handleConfirmInsert = async () => {
+    setShowInsertConfirmation(false);
+    setIsInserting(true);
+    setError('');
+
+    try {
+      const tableName = selectedTable;
+
+      const validRows = rows.filter(row => {
+        return Object.values(row).some(val => val !== '' && val !== null);
+      });
+
+      if (validRows.length === 0) {
+        setToast({ type: 'error', message: 'No valid rows to insert' });
+        setIsInserting(false);
+        return;
+      }
+
+      const response = await dataAPI.insertData(tableName, validRows);
+
+      if (response.success) {
+        const message = response.errors && response.errors.length > 0
+          ? `${response.message}. ${response.errors.length} row(s) had errors.`
+          : response.message;
+
+        setToast({ type: 'success', message });
+        setRows([]);
+        setValidationErrors({});
+        setHasDraftData(false);
+
+        if (uploadStep === 'preview') {
+          handleResetUpload();
+        }
+
+
+        setTimeout(() => {
+          resetAndClose();
+        }, 2000);
+
+      } else {
+        setError(response.message || 'Failed to insert data');
+        setToast({ type: 'error', message: response.message || 'Failed to insert data' });
+      }
+
+    } catch (err) {
+      const errorMessage = err.message || 'Failed to insert data. Please try again.';
+      setError(errorMessage);
+      setToast({ type: 'error', message: errorMessage });
+
+    } finally {
+      setIsInserting(false);
+    }
+  };
+
+  const handleCancelInsert = () => {
+    setShowInsertConfirmation(false);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -690,6 +797,62 @@ const AddDataModal = ({isOpen, onClose}) => {
               {/* manual entry */}
               {activeTab === 'manual' && selectedTable && tableMetadata && (
                 <div className = "space-y-4">
+
+                  {/* validation summary */}
+                  {rows.length > 0 && (
+                    <div className = "bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg p-4">
+
+                      <div className = "flex items-center justify-between mb-3">
+                        <h4 className = "text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          Data Summary
+                        </h4>
+                      </div>
+
+                      <div className = "grid grid-cols-3 gap-4 text-sm">
+                        <div className = "text-center">
+                          <div className = "text-2xl font-bold text-blue-600 dark:text-blue-400">
+                            {rows.length}
+                          </div>
+
+                          <div className = "text-xs text-gray-600 dark:text-gray-400 mt-1">
+                            Total Rows
+                          </div>
+                        </div>
+
+                        <div className = "text-center">
+                          <div className = "text-2xl font-bold text-green-600 dark:text-green-400">
+                            {rows.length - Object.keys(validationErrors).length}
+                          </div>
+
+                          <div className = "text-xs text-gray-600 dark:text-gray-400 mt-1">
+                            Valid Rows
+                          </div>
+                        </div>
+
+                        <div className = "text-center">
+                          <div className = "text-2xl font-bold text-red-600 dark:text-red-400">
+                            {Object.keys(validationErrors).length}
+                          </div>
+
+                          <div className = "text-xs text-gray-600 dark:text-gray-400 mt-1">
+                            Rows with Errors
+                          </div>
+                        </div>
+                      </div>
+
+                      {Object.keys(validationErrors).length > 0 && (
+                        <div className = "mt-3 pt-3 border-t border-gray-200 dark:border-slate-700">
+                          <p className = "text-xs text-red-600 dark:text-red-400 flex items-center space-x-1">
+                            <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                              <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+
+                            <span>Please fix validation errors before inserting data</span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className = "flex items-center justify-between">
                     <div className = "flex items-center space-x-4">
@@ -1115,23 +1278,28 @@ const AddDataModal = ({isOpen, onClose}) => {
 
             {activeTab === 'manual' && selectedTable && rows.length > 0 ? (
               <button
-                onClick = {() => {
-                  const isValid = validateAllRows();
-
-                  if (isValid) {
-                    setToast({ type: 'success', message: 'Validation passed! Insert functionality will be implemented in Phase 11.6' });
-                  } else {
-                    setToast({ type: 'error', message: 'Please fix validation errors before continuing' });
-                  }
-                }}
-                disabled = {rows.length === 0 || Object.keys(validationErrors).length > 0}
+                onClick = {handleInsertClick}
+                disabled = {rows.length === 0 || Object.keys(validationErrors).length > 0 || isInserting}
                 className = "px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
-                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
-                  <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M5 13l4 4L19 7" />
-                </svg>
+                {isInserting ? (
+                  <>
+                    <svg className = "animate-spin h-4 w-4" xmlns = "http://www.w3.org/2000/svg" fill = "none" viewBox = "0 0 24 24">
+                      <circle className = "opacity-25" cx = "12" cy = "12" r = "10" stroke = "currentColor" strokeWidth = "4"></circle>
+                      <path className = "opacity-75" fill = "currentColor" d = "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
 
-                <span>Insert {rows.length} Row{rows.length !== 1 ? 's' : ''}</span>
+                    <span>Inserting...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                      <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M5 13l4 4L19 7" />
+                    </svg>
+
+                    <span>Insert {rows.length} Row{rows.length !== 1 ? 's' : ''}</span>
+                  </>
+                )}
               </button>
 
             ) : (
@@ -1149,7 +1317,7 @@ const AddDataModal = ({isOpen, onClose}) => {
         </div>
       </div>
 
-      {/* close confirmation and other texts */}
+      {/* close confirmation */}
       {showCloseConfirmation && (
         <div className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
           <div className = "bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
@@ -1174,6 +1342,80 @@ const AddDataModal = ({isOpen, onClose}) => {
                 className = "px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
               >
                 Discard Changes
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* insert confirmation */}
+      {showInsertConfirmation && (
+        <div className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className = "bg-white dark:bg-slate-800 rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+            <div className = "flex items-start space-x-3 mb-4">
+
+              <div className = "flex-shrink-0 w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <svg className = "w-6 h-6 text-green-600 dark:text-green-400" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                  <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M5 13l4 4L19 7" />
+                </svg>
+              </div>
+
+              <div className = "flex-1">
+                <h3 className = "text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">
+                  Confirm Data Insert
+                </h3>
+
+                <div className = "text-sm text-gray-600 dark:text-gray-400 space-y-2">
+                  <p>
+                    You are about to insert <strong className = "text-gray-800 dark:text-gray-100">{rows.length} row{rows.length !== 1 ? 's' : ''}</strong> into:
+                  </p>
+
+                  <p className = "font-mono text-xs bg-gray-100 dark:bg-slate-900 px-2 py-1 rounded">
+                    {selectedTable}
+                  </p>
+
+                  {(() => {
+                    const nullableAutoFills = tableMetadata?.columns.filter(col => {
+                      const hasData = rows.some(row => row[col.name] !== null && row[col.name] !== '');
+                      return col.nullable && !hasData;
+                    }) || [];
+
+                    if (nullableAutoFills.length > 0) {
+                      return (
+                        <p className = "text-xs">
+                          <strong>Note:</strong> {nullableAutoFills.length} nullable column{nullableAutoFills.length !== 1 ? 's' : ''} will be set to NULL.
+                        </p>
+                      );
+                    }
+
+                    return null;
+                  })()}
+
+                  <p className = "text-xs text-yellow-700 dark:text-yellow-400 mt-3">
+                    This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className = "flex justify-end space-x-3 mt-6">
+              <button
+                onClick = {handleCancelInsert}
+                className = "px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick = {handleConfirmInsert}
+                className = "px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center space-x-2"
+              >
+                <svg className = "w-4 h-4" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                  <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M5 13l4 4L19 7" />
+                </svg>
+
+                <span>Confirm Insert</span>
               </button>
             </div>
 
