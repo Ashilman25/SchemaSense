@@ -139,6 +139,7 @@ export const parseJSON = (content) => {
       const row = {};
 
       headers.forEach(key => {
+        const value = item[key];
         row[key] = (value === undefined || value === '' || value === null) ? null : value;
       });
 
@@ -195,4 +196,95 @@ export const validateFileType = (file) => {
   }
 
   return {valid: true};
+};
+
+
+
+//COLUMN FUNCTIONALITIES
+
+export const autoMatchColumns = (uploadedHeaders, tableColumns) => {
+  const mapping = {};
+  const tableColumnsNames = tableColumns.map(col => col.name);
+
+  uploadedHeaders.forEach(uploadedHeader => {
+    const exactMatch = tableColumnsNames.find(
+      col => col.toLowerCase() === uploadedHeader.toLowerCase()
+    );
+
+    if (exactMatch) {
+      mapping[uploadedHeader] = exactMatch;
+
+    } else {
+      const partialMatch = tableColumnsNames.find(
+        col => col.toLowerCase().includes(uploadedHeader.toLowerCase()) || uploadedHeader.toLowerCase().includes(col.toLowerCase())
+      );
+
+      mapping[uploadedHeader] = partialMatch || null;
+    }
+  });
+
+  return mapping;
+
+};
+
+
+export const validateColumnMapping = (mapping, tableColumns) => {
+  const mappedTableColumns = new Set(Object.values(mapping).filter(v => v !== null));
+  const requiredColumns = tableColumns.filter(col => !col.nullable && !col.is_pk);
+  const pkColumns = tableColumns.filter(col => col.is_pk && !col.type.toLowerCase().includes('serial'));
+  
+  const errors = [];
+  const warnings = [];
+
+  requiredColumns.forEach(col => {
+    if (!mappedTableColumns.has(col.name)) {
+      errors.push(`Required column "${col.name}" is not mapped`);
+    }
+  });
+
+  //check missing pks
+  pkColumns.forEach(col => {
+    if (!mappedTableColumns.has(col.name)) {
+      errors.push(`Primary key column "${col.name}" is not mapped and must be provided`);
+    }
+  });
+
+
+  //check unmapped uploaded cols
+  const unmappedUploaded = Object.entries(mapping).filter(([_, tableCol]) => tableCol === null);
+  if (unmappedUploaded.length > 0) {
+    warnings.push(`${unmappedUploaded.length} uploaded column(s) will be ignored: ${unmappedUploaded.map(([col]) => col).join(', ')}`);
+  }
+
+
+  //check table cols
+  const nullableColumns = tableColumns.filter(col => col.nullable && !mappedTableColumns.has(col.name));
+  if (nullableColumns.length > 0) {
+    warnings.push(`${nullableColumns.length} nullable column(s) not in upload will be set to NULL: ${nullableColumns.map(col => col.name).join(', ')}`);
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings
+  };
+};
+
+
+export const applyColumnMapping = (rows, mapping, tableColumns) => {
+  return rows.map(row => {
+    const mappedRow = {};
+
+    tableColumns.forEach(col => {
+      mappedRow[col.name] = null;
+    });
+
+    Object.entries(mapping).forEach(([uploadedCol, tableCol]) => {
+      if (tableCol !== null && row[uploadedCol] !== undefined) {
+        mappedRow[tableCol] = row[uploadedCol];
+      }
+    });
+
+    return mappedRow;
+  });
 };
