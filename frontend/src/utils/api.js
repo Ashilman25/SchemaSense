@@ -247,10 +247,41 @@ export const historyAPI = {
 
 };
 
+
+export const dataAPI = {
+
+  // Insert rows into a table
+  // Returns: {success: boolean, rows_inserted: number, message: string, errors?: string[]}
+  insertData: async (table, rows) => {
+    return apiRequest('/api/data/insert', {
+      method: 'POST',
+      body: JSON.stringify({
+        table,
+        rows,
+      }),
+    });
+  },
+
+
+  // Preview data insertion (validation only, no actual insert)
+  // Returns: {valid: boolean, table_columns: object, extra_columns: string[], row_count: number}
+  previewData: async (table, rows) => {
+    return apiRequest('/api/data/preview', {
+      method: 'POST',
+      body: JSON.stringify({
+        table,
+        rows,
+      }),
+    });
+  },
+
+};
+
 export default {
   dbConfigAPI,
   schemaAPI,
   nlToSqlAPI,
   sqlAPI,
   historyAPI,
+  dataAPI,
 };

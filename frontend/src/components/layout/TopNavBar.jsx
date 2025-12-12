@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useTheme } from "../../context/ThemeContext";
 import DBConfigModal from "../modals/DBConfigModal";
+import AddDataModal from "../modals/AddDataModal";
 import { dbConfigAPI } from "../../utils/api";
 import { loadDBCredentials } from "../../utils/dbStorage";
 
 const TopNavBar = ({ onConnectionChange }) => {
     const {theme, toggleTheme} = useTheme();
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isAddDataModalOpen, setIsAddDataModalOpen] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
     const [currentConnection, setCurrentConnection] = useState(null);
 
@@ -89,6 +91,14 @@ const TopNavBar = ({ onConnectionChange }) => {
         setIsModalOpen(false);
     };
 
+    const handleOpenAddDataModal = () => {
+        setIsAddDataModalOpen(true);
+    };
+
+    const handleCloseAddDataModal = () => {
+        setIsAddDataModalOpen(false);
+    };
+
     return (
         <nav className = "bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 shadow-sm transition-colors">
             <div className = "px-6 py-4 flex items-center justify-between">
@@ -112,6 +122,23 @@ const TopNavBar = ({ onConnectionChange }) => {
                         </span>
                     </div>
 
+                    {/* add data dutton*/}
+                    <button
+                        onClick = {handleOpenAddDataModal}
+                        disabled = {!isConnected}
+                        className = {`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                            isConnected
+                                ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                                : 'bg-gray-300 dark:bg-slate-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                        }`}
+                        title = {isConnected ? "Add Data to Tables" : "Connect to a database first"}
+                    >
+                        <svg className = "w-5 h-5" fill = "none" stroke = "currentColor" viewBox = "0 0 24 24">
+                            <path strokeLinecap = "round" strokeLinejoin = "round" strokeWidth = {2} d = "M12 4v16m8-8H4" />
+                        </svg>
+
+                        <span className = "text-sm font-medium">Add Data</span>
+                    </button>
 
                     {/* right side */}
                     <button
@@ -170,6 +197,11 @@ const TopNavBar = ({ onConnectionChange }) => {
                 onClose = {handleCloseModal}
                 onConnectionSuccess = {handleConnectionSuccess}
                 currentConnection = {currentConnection}
+            />
+
+            <AddDataModal
+                isOpen = {isAddDataModalOpen}
+                onClose = {handleCloseAddDataModal}
             />
         </nav>
     )
