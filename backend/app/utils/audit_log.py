@@ -2,7 +2,7 @@
 
 import logging
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum
 
 audit_logger = logging.getLogger("schemasense.audit")
@@ -12,6 +12,9 @@ class AuditEventType(str, Enum):
     DB_PROVISION_FAILURE = "db_provision_failure"
     DB_DEPROVISION_SUCCESS = "db_deprovision_success"
     DB_DEPROVISION_FAILURE = "db_deprovision_failure"
+
+    DATA_PREVIEW = "data_preview"
+    DATA_INSERT = "data_insert"
 
     QUOTA_EXCEEDED = "quota_exceeded"
     RATE_LIMIT_EXCEEDED = "rate_limit_exceeded"
@@ -25,7 +28,7 @@ class AuditEventType(str, Enum):
 class AuditEvent:
     
     def __init__(self, event_type: AuditEventType, session_id: Optional[str] = None, user_ip: Optional[str] = None, details: Optional[Dict[str, Any]] = None, success: bool = True, error_message: Optional[str] = None):
-        self.timestamp = datetime.utcnow().isoformat()
+        self.timestamp = datetime.now(UTC).isoformat()
         self.event_type = event_type
         self.session_id = session_id or "anonymous"
         self.user_ip = user_ip or "unknown"
@@ -186,3 +189,29 @@ def log_sql_validation_blocked(session_id: str, user_ip: str, reason: str, sql_s
     )
     
     event.log(logging.WARNING)
+
+
+def log_data_preview(session_id: str, user_ip: str, table: str, row_count: int, success: bool, error_message: Optional[str] = None) -> None:
+    event = AuditEvent(
+        event_type = AuditEventType.DATA_PREVIEW,
+        session_id = session_id,
+        user_ip = user_ip,
+        details = {"table": table, "rows": row_count},
+        success = success,
+        error_message = error_message,
+    )
+    level = logging.INFO if success else logging.WARNING
+    event.log(level)
+
+
+def log_data_insert(session_id: str, user_ip: str, table: str, row_count: int, success: bool, error_message: Optional[str] = None) -> None:
+    event = AuditEvent(
+        event_type = AuditEventType.DATA_INSERT,
+        session_id = session_id,
+        user_ip = user_ip,
+        details = {"table": table, "rows": row_count},
+        success = success,
+        error_message =  error_message,
+    )
+    level = logging.INFO if success else logging.WARNING
+    event.log(level)
