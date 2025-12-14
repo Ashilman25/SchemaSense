@@ -97,17 +97,12 @@ def _provision_managed_database(session_id: Optional[str], load_sample: bool) ->
             metadata_recorded = True
             logger.info("Recorded metadata", db_name = db_name)
             
-        #parse host and port
         import re
-        match = re.match(r'postgresql://[^@]+@([^:]+):(\d+)/', admin_dsn)
-        
-        if match:
-            host = match.group(1)
-            port = int(match.group(2))
-            
-        else:
-            host = "localhost"
-            port = 5432
+        from urllib.parse import urlparse
+
+        parsed = urlparse(admin_dsn)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 5432
             
         db_config = DatabaseConfig(
             host = host,
