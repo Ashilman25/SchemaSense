@@ -97,12 +97,17 @@ def _provision_managed_database(session_id: Optional[str], load_sample: bool) ->
             metadata_recorded = True
             logger.info("Recorded metadata", db_name = db_name)
             
-        import re
         from urllib.parse import urlparse
 
         parsed = urlparse(admin_dsn)
-        host = parsed.hostname or "localhost"
+        host = parsed.hostname
         port = parsed.port or 5432
+
+        if not host:
+            logger.error("Failed to parse hostname from admin DSN", admin_dsn_preview=admin_dsn[:30] + "...")
+            raise Exception(f"Could not extract hostname from admin DSN. Check SCHEMASENSE_MANAGED_PG_ADMIN_DSN format.")
+
+        logger.info("Parsed connection details for provisioned database", host=host, port=port)
             
         db_config = DatabaseConfig(
             host = host,
