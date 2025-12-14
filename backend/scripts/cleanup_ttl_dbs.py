@@ -78,13 +78,24 @@ def cleanup_stale_databases(dry_run: bool = False, ttl_days: int = 14):
                                 FROM pg_stat_activity
                                 WHERE datname = %s AND pid <> pg_backend_pid()
                                 """, (db_name,))
-                    
-                    #drop db
+
+
                     logger.info(f"Dropping database {db_name}")
                     cur.execute(f"DROP DATABASE IF EXISTS {db_name}")
-                    
-                    #drop role
+
                     logger.info(f"Dropping role {db_role}")
+
+                    import re
+                    admin_dsn = settings.managed_pg_admin_dsn
+                    user_match = re.match(r'postgresql://([^:]+):', admin_dsn)
+                    admin_user = user_match.group(1) if user_match else None
+
+                    if admin_user:
+                        try:
+                            cur.execute(f"REVOKE {db_role} FROM {admin_user}")
+                        except Exception:
+                            pass  # Ignore if already revoked
+
                     cur.execute(f"DROP ROLE IF EXISTS {db_role}")
                     
                     #update meta data
