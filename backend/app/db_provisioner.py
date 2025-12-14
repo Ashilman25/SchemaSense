@@ -53,7 +53,12 @@ def _provision_managed_database(session_id: Optional[str], load_sample: bool) ->
     try:
         admin_conn = psycopg2.connect(admin_dsn)
         admin_conn.autocommit = True #required for CREATE DATABASE
-        
+
+        # Extract admin username from DSN for Neon compatibility
+        import re
+        user_match = re.match(r'postgresql://([^:]+):', admin_dsn)
+        admin_user = user_match.group(1) if user_match else None
+
         with admin_conn.cursor() as cur:
             cur.execute(f"""
                         CREATE ROLE {role_name}
@@ -65,9 +70,13 @@ def _provision_managed_database(session_id: Optional[str], load_sample: bool) ->
                         NOREPLICATION
                         CONNECTION LIMIT {settings.provision_connection_limit_per_role}
                         """, (password,))
-            
+
             role_created = True
             logger.info("Created role", role_name = role_name)
+
+            if admin_user:
+                cur.execute(f"GRANT {role_name} TO {admin_user}")
+                logger.info("Granted role to admin user", role_name = role_name, admin_user = admin_user)
 
             #role level timeouts
             cur.execute(f"ALTER ROLE {role_name} SET statement_timeout = {settings.provision_default_statement_timeout_ms}")
@@ -139,6 +148,12 @@ def _provision_managed_database(session_id: Optional[str], load_sample: bool) ->
 
                     if role_created:
                         logger.info("Attempting to drop role during cleanup", role_name = role_name)
+                        # Revoke role from admin first (for Neon compatibility)
+                        if admin_user:
+                            try:
+                                cur.execute(f"REVOKE {role_name} FROM {admin_user}")
+                            except Exception:
+                                pass  # Ignore if already revoked or doesn't exist
                         cur.execute(f"DROP ROLE IF EXISTS {role_name}")
 
                 logger.info("Cleanup completed")
