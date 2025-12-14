@@ -2,6 +2,7 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
 import sys
+import json
 
 
 class Settings(BaseSettings):
@@ -47,6 +48,34 @@ class Settings(BaseSettings):
         env_prefix = "SCHEMASENSE_",
         case_sensitive = False,
     )
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def parse_allowed_origins(cls, v):
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if not isinstance(parsed, list):
+                    raise ValueError("ALLOWED_ORIGINS must be a JSON array of strings")
+                
+                return parsed
+            
+            except json.JSONDecodeError as e:
+                print(
+                    f"\n{'='*80}\n"
+                    f"FATAL ERROR: ALLOWED_ORIGINS must be valid JSON array.\n"
+                    f"Expected format: [\"https://example.com\",\"https://another.com\"]\n"
+                    f"Parse error: {e}\n"
+                    f"{'='*80}\n",
+                    file=sys.stderr
+                )
+                sys.exit(1)
+                
+        elif isinstance(v, list):
+            return v
+        
+        else:
+            raise ValueError("ALLOWED_ORIGINS must be a list or JSON string")
 
     @field_validator("managed_pg_admin_dsn")
     @classmethod
