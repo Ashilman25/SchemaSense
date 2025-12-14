@@ -5,7 +5,7 @@ import { saveDBCredentials, clearDBCredentials } from '../../utils/dbStorage';
 
 const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess, currentConnection }) => {
   const [formData, setFormData] = useState({
-    host: 'localhost',
+    host: '',
     port: '5432',
     dbname: '',
     user: '',
@@ -30,7 +30,7 @@ const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess, currentConnection
   useEffect(() => {
     if (isOpen && currentConnection && Object.keys(currentConnection).length > 0) {
       setFormData({
-        host: currentConnection.host || 'localhost',
+        host: currentConnection.host || '',
         port: currentConnection.port?.toString() || '5432',
         dbname: currentConnection.dbname || '',
         user: currentConnection.user || '',
@@ -54,7 +54,7 @@ const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess, currentConnection
 
     if (currentConnection) {
       setFormData({
-        host: currentConnection.host || 'localhost',
+        host: currentConnection.host || '',
         port: currentConnection.port?.toString() || '5432',
         dbname: currentConnection.dbname || '',
         user: currentConnection.user || '',
@@ -524,7 +524,7 @@ const DBConfigModal = ({ isOpen, onClose, onConnectionSuccess, currentConnection
                   onChange = {handleChange}
                   disabled = {isProvisioning}
                   className = "w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  placeholder = "localhost"
+                  placeholder = "your-db-host.neon.tech"
                 />
               </div>
 
