@@ -171,3 +171,4 @@ infra/README.md
 test_admin_security.py
 test_cleanup_imports.py
 test_role_isolation.py
+test_session_isolation.py

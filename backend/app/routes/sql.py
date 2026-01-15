@@ -1,9 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
 from app.schema.cache import get_schema, refresh_schema
 from app.nl_to_sql.validator import validate_and_normalize_sql, SQLValidationError
 from app.db import get_connection, get_database_config
 from app.db_provisioner import update_db_activity
+from app.utils.session import get_or_create_session_id
 
 
 router = APIRouter(prefix="/api/sql", tags=["sql"])
@@ -56,7 +57,8 @@ def validate_sql(request: SQLRequest):
 
 # Run the validated SQL against connected database
 @router.post("/execute")
-def execute_sql(request: SQLRequest):
+def execute_sql(http_request: Request, http_response: Response, request: SQLRequest):
+    session_id = get_or_create_session_id(http_request, http_response)
     conn = None
     cursor = None
 
@@ -70,7 +72,7 @@ def execute_sql(request: SQLRequest):
                 "message": f"SQL validation failed: {'; '.join(warnings)}"
             }
 
-        conn = get_connection()
+        conn = get_connection(session_id)
         cursor = conn.cursor()
 
 
@@ -127,7 +129,7 @@ def execute_sql(request: SQLRequest):
                 schema_refreshed = None
 
         # Update activity tracking for managed DBs
-        db_config = get_database_config()
+        db_config = get_database_config(session_id)
         if db_config and db_config.dbname.startswith("schemasense_user_"):
             update_db_activity(db_config.dbname)
 
@@ -161,12 +163,13 @@ def execute_sql(request: SQLRequest):
 
 #run a simplified explain plan structure for given sql
 @router.post("/plan")
-def plan_sql(request: SQLRequest):
+def plan_sql(http_request: Request, http_response: Response, request: SQLRequest):
+    session_id = get_or_create_session_id(http_request, http_response)
     conn = None
     cursor = None
 
     try:
-        conn = get_connection()
+        conn = get_connection(session_id)
         cursor = conn.cursor()
 
 
@@ -253,7 +256,7 @@ def plan_sql(request: SQLRequest):
         traverse_plan(root_plan)
 
         # Update activity tracking for managed DBs
-        db_config = get_database_config()
+        db_config = get_database_config(session_id)
         if db_config and db_config.dbname.startswith("schemasense_user_"):
             update_db_activity(db_config.dbname)
 

@@ -186,12 +186,11 @@ def close_resources(cursor, conn) -> None:
                     conn.close.side_effect = orig_side_effect
 
 
-def resolve_request_context(http_request: Optional[Request]) -> tuple[str, str]:
-    response = Response()
-    if http_request is None:
+def resolve_request_context(http_request: Optional[Request], http_response: Optional[Response]) -> tuple[str, str]:
+    if http_request is None or http_response is None:
         return "anonymous", "unknown"
 
-    session_id = get_or_create_session_id(http_request, response)
+    session_id = get_or_create_session_id(http_request, http_response)
     user_ip = http_request.client.host if http_request.client else "unknown"
     return session_id, user_ip
 
@@ -208,12 +207,12 @@ def enforce_authorization(http_request: Optional[Request]) -> None:
 
 
 @router.post("/insert", response_model=InsertDataResponse)
-async def insert_data(request: InsertDataRequest, http_request: Request = None):
+async def insert_data(request: InsertDataRequest, http_request: Request = None, http_response: Response = None):
     conn = None
     cursor = None
     try:
         enforce_authorization(http_request)
-        session_id, user_ip = resolve_request_context(http_request)
+        session_id, user_ip = resolve_request_context(http_request, http_response)
         schema_name, table_name = validate_table_name(request.table)
 
         if not request.rows or len(request.rows) == 0:
@@ -237,7 +236,7 @@ async def insert_data(request: InsertDataRequest, http_request: Request = None):
         columns = list(first_row.keys())
         validate_column_names(columns)
 
-        conn = get_connection()
+        conn = get_connection(session_id)
         if not conn:
             raise HTTPException(
                 status_code = 500,
@@ -347,22 +346,22 @@ async def insert_data(request: InsertDataRequest, http_request: Request = None):
         
         
 @router.post("/preview")
-async def preview_data(request: InsertDataRequest, http_request: Request = None):
+async def preview_data(request: InsertDataRequest, http_request: Request = None, http_response: Response = None):
     conn = None
     cursor = None
     try:
         enforce_authorization(http_request)
-        session_id, user_ip = resolve_request_context(http_request)
+        session_id, user_ip = resolve_request_context(http_request, http_response)
         schema_name, table_name = validate_table_name(request.table)
         enforce_payload_size(request.rows)
         
-        conn = get_connection()
+        conn = get_connection(session_id)
         if not conn:
             raise HTTPException(
                 status_code = 500,
                 detail = "Unable to connect to database. Please check your database connection settings and try again."
             )
-            
+
         cursor = conn.cursor()
         
         try:

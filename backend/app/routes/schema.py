@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any, Dict
 from app.models.schema_model import CanonicalSchemaModel, Column, SchemaValidationError
@@ -6,6 +6,7 @@ from app.schema.cache import get_or_refresh_schema, refresh_schema
 from app.db import get_connection, get_database_config
 from app.db_provisioner import update_db_activity
 from app.schema.ddl_executor import generate_ddl_from_action, execute_ddl_statements, execute_ddl_text
+from app.utils.session import get_or_create_session_id
 import logging
 
 logger = logging.getLogger(__name__)
@@ -61,16 +62,17 @@ class DDLEditResponse(BaseModel):
 
 #get schema model
 @router.get("")
-def get_schema():
+def get_schema(request: Request, response: Response):
+    session_id = get_or_create_session_id(request, response)
     conn = None
     try:
-        conn = get_connection()
+        conn = get_connection(session_id)
 
         schema_model = get_or_refresh_schema(conn)
         api_payload = schema_model.to_dict_for_api()
 
         # Update activity tracking for managed DBs
-        db_config = get_database_config()
+        db_config = get_database_config(session_id)
         if db_config and db_config.dbname.startswith("schemasense_user_"):
             update_db_activity(db_config.dbname)
 
@@ -91,7 +93,8 @@ def get_schema():
     
 
 @router.get('/sample-rows')
-def get_sample_rows(table: str, limit: int = 10):
+def get_sample_rows(request: Request, response: Response, table: str, limit: int = 10):
+    session_id = get_or_create_session_id(request, response)
     conn = None
     cursor = None
 
@@ -99,7 +102,7 @@ def get_sample_rows(table: str, limit: int = 10):
         limit = 100
 
     try:
-        conn = get_connection()
+        conn = get_connection(session_id)
         cursor = conn.cursor()
 
         schema_model = get_or_refresh_schema(conn)
@@ -120,7 +123,7 @@ def get_sample_rows(table: str, limit: int = 10):
         row_data = [list(row) for row in rows]
 
         # Update activity tracking for managed DBs
-        db_config = get_database_config()
+        db_config = get_database_config(session_id)
         if db_config and db_config.dbname.startswith("schemasense_user_"):
             update_db_activity(db_config.dbname)
 
@@ -149,10 +152,11 @@ def get_sample_rows(table: str, limit: int = 10):
 
 
 @router.get('/ddl')
-def get_schema_ddl():
+def get_schema_ddl(request: Request, response: Response):
+    session_id = get_or_create_session_id(request, response)
     conn = None
     try:
-        conn = get_connection()
+        conn = get_connection(session_id)
 
         schema_model = get_or_refresh_schema(conn)
         ddl_text = schema_model.to_ddl()
@@ -178,10 +182,11 @@ def get_schema_ddl():
 
 
 @router.post('/er-edit')
-def apply_er_edits(request: EREditRequest) -> EREditResponse:
+def apply_er_edits(http_request: Request, http_response: Response, request: EREditRequest) -> EREditResponse:
+    session_id = get_or_create_session_id(http_request, http_response)
     conn = None
     try:
-        conn = get_connection()
+        conn = get_connection(session_id)
         schema_model = get_or_refresh_schema(conn)
 
         ddl_statements = []
@@ -213,8 +218,8 @@ def apply_er_edits(request: EREditRequest) -> EREditResponse:
             )
 
         refreshed_schema = refresh_schema(conn)
-        db_config = get_database_config()
-        
+        db_config = get_database_config(session_id)
+
         if db_config and db_config.dbname.startswith("schemasense_user_"):
             update_db_activity(db_config.dbname)
 
@@ -473,13 +478,14 @@ def _extract_action_params(action: ERAction) -> Dict[str, Any]:
 
 
 @router.post('/ddl-edit')
-def apply_ddl_edit(request: DDLEditRequest) -> DDLEditResponse:
+def apply_ddl_edit(http_request: Request, http_response: Response, request: DDLEditRequest) -> DDLEditResponse:
+    session_id = get_or_create_session_id(http_request, http_response)
     conn = None
-    
+
     try:
         try:
             CanonicalSchemaModel.from_ddl(request.ddl)
-            
+
         except SchemaValidationError as e:
             return DDLEditResponse(
                 success = False,
@@ -488,7 +494,7 @@ def apply_ddl_edit(request: DDLEditRequest) -> DDLEditResponse:
                 error = "Schema validation error",
                 details = str(e)
             )
-            
+
         except Exception as e:
             return DDLEditResponse(
                 success = False,
@@ -497,8 +503,8 @@ def apply_ddl_edit(request: DDLEditRequest) -> DDLEditResponse:
                 error = "DDL parsing failed",
                 details = str(e)
             )
-            
-        conn = get_connection()
+
+        conn = get_connection(session_id)
         success, error_msg = execute_ddl_text(conn, request.ddl)
         
         if not success:
@@ -511,8 +517,8 @@ def apply_ddl_edit(request: DDLEditRequest) -> DDLEditResponse:
             )
             
         refreshed_schema = refresh_schema(conn)
-        db_config = get_database_config()
-        
+        db_config = get_database_config(session_id)
+
         if db_config and db_config.dbname.startswith("schemasense_user_"):
             update_db_activity(db_config.dbname)
             

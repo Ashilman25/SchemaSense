@@ -16,10 +16,6 @@ router = APIRouter(prefix = "/api/db", tags=["provisioning"])
 
 
 def verify_admin_key(x_admin_key: Optional[str] = Header(None)):
-    """
-    Dependency to verify admin API key for protected endpoints.
-    Checks the X-Admin-Key header against the configured admin API key.
-    """
     settings = get_settings()
 
     if not x_admin_key:
@@ -181,7 +177,7 @@ async def provision_db(request: Request, response: Response, body: ProvisionRequ
             logger.error("Connectivity verification failed", db_name = db_config.dbname)
             raise Exception("Database created but connectivity verification failed")
 
-        set_database_config(db_config)
+        set_database_config(db_config, session_id)
         logger.info("Database config set for session", session_id = session_id, db_name = db_config.dbname)
 
 

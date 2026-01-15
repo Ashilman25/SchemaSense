@@ -21,13 +21,14 @@ def _validate_username(username: str) -> None:
 
 #just return db connection status
 @router.get("/db")
-def get_db_status():
-    config = get_database_config()
+def get_db_status(request: Request, response: Response):
+    session_id = get_or_create_session_id(request, response)
+    config = get_database_config(session_id)
     if config is None:
         return {"connected": False}
 
     try:
-        conn = get_connection()
+        conn = get_connection(session_id)
         cur = conn.cursor()
 
         cur.execute("SELECT 1;")
@@ -121,10 +122,11 @@ def get_session_db_config(request: Request, response: Response, authorized: bool
 
 #disconnect from db
 @router.delete("/db")
-def disconnect_db():
-    set_database_config(None)
+def disconnect_db(request: Request, response: Response):
+    session_id = get_or_create_session_id(request, response)
+    set_database_config(None, session_id)
     clear_schema_cache()
-    
+
     return {
         "success" : True,
         "message" : "Disconnected from database"
@@ -138,21 +140,22 @@ def disconnect_db():
 #2. Creating a new user and dropping the old one, if username changes
 #3. Saving hte new credentials in SchemaSense config
 @router.patch("/db")
-def update_db_credentials(config: DatabaseConfig):
-    old_config = get_database_config()
+def update_db_credentials(request: Request, response: Response, config: DatabaseConfig):
+    session_id = get_or_create_session_id(request, response)
+    old_config = get_database_config(session_id)
     if not old_config:
         return {
             "success" : False,
             "message" : "No existing connection to update"
         }
-        
+
     try:
         _validate_username(config.user)
-        
-        conn = get_connection()
+
+        conn = get_connection(session_id)
         cur = conn.cursor()
         cur.execute("SELECT 1;") #ensures connected
-        
+
         username_changed = old_config.user != config.user
         password_changed = old_config.password != config.password
         
@@ -197,11 +200,11 @@ def update_db_credentials(config: DatabaseConfig):
             
         cur.close()
         conn.close()
-        
-        set_database_config(config)
-        
+
+        set_database_config(config, session_id)
+
         #test connect
-        conn = get_connection()
+        conn = get_connection(session_id)
         cur = conn.cursor()
         cur.execute("SELECT 1;")
         cur.fetchone()
@@ -267,8 +270,8 @@ def update_db_credentials(config: DatabaseConfig):
                 
                     
     except Exception as e:
-        set_database_config(old_config)
-        
+        set_database_config(old_config, session_id)
+
         error_msg = str(e)
         
         if "permission denied to create role" in error_msg.lower() or "createrole" in error_msg.lower():
@@ -292,13 +295,14 @@ def update_db_credentials(config: DatabaseConfig):
 
 #save db config
 @router.post("/db")
-def set_db(config: DatabaseConfig):
+def set_db(request: Request, response: Response, config: DatabaseConfig):
+    session_id = get_or_create_session_id(request, response)
 
     try:
-        old_config = get_database_config()
-        set_database_config(config)
+        old_config = get_database_config(session_id)
+        set_database_config(config, session_id)
 
-        conn = get_connection()
+        conn = get_connection(session_id)
         cur = conn.cursor()
 
         cur.execute("SELECT 1;")
@@ -312,7 +316,8 @@ def set_db(config: DatabaseConfig):
 
     except RuntimeError as e:
         # Restore old config on failure
-        set_database_config(old_config) if old_config else None
+        if old_config:
+            set_database_config(old_config, session_id)
 
         return {
             "success": False,
@@ -321,7 +326,8 @@ def set_db(config: DatabaseConfig):
         }
     except Exception as e:
         # Restore old config on failure
-        set_database_config(old_config) if old_config else None
+        if old_config:
+            set_database_config(old_config, session_id)
 
         return {
             "success": False,
