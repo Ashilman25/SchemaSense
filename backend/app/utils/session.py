@@ -66,8 +66,8 @@ def get_or_create_session_id(request: Request, response: Response) -> str:
         value = signed_session,
         max_age = settings.session_max_age_days * 24 * 60 * 60,
         httponly = True,
-        secure = is_production,  
-        samesite = "lax"
+        secure = is_production,
+        samesite = "none" if is_production else "lax"  #none needed for cross origin cookies in prod
     )
 
     return session_id
