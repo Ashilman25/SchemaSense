@@ -67,7 +67,8 @@ def get_or_create_session_id(request: Request, response: Response) -> str:
         max_age = settings.session_max_age_days * 24 * 60 * 60,
         httponly = True,
         secure = is_production,
-        samesite = "none" if is_production else "lax"  #none needed for cross origin cookies in prod
+        samesite = "lax",
+        domain = ".schema-sense.com" if is_production else None  # Share cookie across subdomains
     )
 
     return session_id
