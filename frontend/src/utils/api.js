@@ -5,6 +5,7 @@ export const apiRequest = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
 
   const config = {
+    credentials: 'include',  //cookies for cross origin requests
     headers: {
       'Content-Type': 'application/json',
       ...options.headers,
