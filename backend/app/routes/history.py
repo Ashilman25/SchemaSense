@@ -1,11 +1,12 @@
 from typing import List, Optional, Union
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from psycopg2.extras import RealDictCursor
 import psycopg2.errors
 
 from app.db import get_connection
+from app.utils.session import get_or_create_session_id
 
 router = APIRouter(prefix="/api/history", tags=["history"])
 
@@ -27,12 +28,12 @@ class HistoryItemResponse(BaseModel):
     
     
 
-def _init_history_table():
+def _init_history_table(session_id: str):
     conn = None
     cursor = None
-    
+
     try:
-        conn = get_connection()
+        conn = get_connection(session_id)
         cursor = conn.cursor()
 
         cursor.execute("CREATE SCHEMA IF NOT EXISTS schemasense;")
@@ -84,11 +85,12 @@ def _init_history_table():
     
 
 @router.post("", response_model = dict)
-def add_history(item: HistoryItemCreate):
+def add_history(request: Request, response: Response, item: HistoryItemCreate):
+    session_id = get_or_create_session_id(request, response)
     try:
-        _init_history_table()
-        
-        conn = get_connection()
+        _init_history_table(session_id)
+
+        conn = get_connection(session_id)
         cursor = conn.cursor()
 
         sql_text = None
@@ -122,15 +124,16 @@ def add_history(item: HistoryItemCreate):
     
     
 @router.get("", response_model = List[HistoryItemResponse])
-def list_history(limit: int = 50):
+def list_history(request: Request, response: Response, limit: int = 50):
+    session_id = get_or_create_session_id(request, response)
     conn = None
     cursor = None
-    
+
     try:
         limit = min(limit, 200) #might change limit idk
-        _init_history_table()
+        _init_history_table(session_id)
 
-        conn = get_connection()
+        conn = get_connection(session_id)
         cursor = conn.cursor(cursor_factory = RealDictCursor) #makes it return the rows as dicts instead of tuples
 
         cursor.execute("""
@@ -177,11 +180,12 @@ def list_history(limit: int = 50):
 
 
 @router.delete("/{history_id}", response_model = dict)
-def delete_history(history_id: int):
+def delete_history(request: Request, response: Response, history_id: int):
+    session_id = get_or_create_session_id(request, response)
     try:
-        _init_history_table()
+        _init_history_table(session_id)
 
-        conn = get_connection()
+        conn = get_connection(session_id)
         cursor = conn.cursor()
 
         cursor.execute("""

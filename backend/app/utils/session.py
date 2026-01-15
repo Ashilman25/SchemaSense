@@ -59,12 +59,14 @@ def get_or_create_session_id(request: Request, response: Response) -> str:
     session_id = generate_session_id()
     signed_session = serialize_session(session_id)
 
+    is_production = settings.environment.lower() in ("production", "prod", "demo")
+
     response.set_cookie(
         key = settings.session_cookie_name,
         value = signed_session,
         max_age = settings.session_max_age_days * 24 * 60 * 60,
         httponly = True,
-        secure = False,   #MAKE TRUE FOR PRODUCTION **************
+        secure = is_production,  
         samesite = "lax"
     )
 
