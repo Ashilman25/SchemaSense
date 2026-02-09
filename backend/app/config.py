@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     session_secret_key: str = "dev-secret-key-change-in-production"
     session_cookie_name: str = "schemasense_session"
     session_max_age_days: int = 365
+    
+    # REDIS CONFIGURATION
+    redis_url: str | None = None
+    redis_enabled: bool = True
+    redis_default_ttl_seconds: int = 3600  # 1 hour default TTL for cached items
+    schema_cache_ttl_seconds: int = 86400  # 24 hours TTL for cached database schemas
+    nl_sql_cache_ttl_seconds: int = 86400  # 24 hours TTL for cached NL->SQL translations
 
 
     provision_max_dbs_per_session: int = 3  
