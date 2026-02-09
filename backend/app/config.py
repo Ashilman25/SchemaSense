@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     redis_default_ttl_seconds: int = 3600  # 1 hour default TTL for cached items
     schema_cache_ttl_seconds: int = 86400  # 24 hours TTL for cached database schemas
     nl_sql_cache_ttl_seconds: int = 86400  # 24 hours TTL for cached NL->SQL translations
+    
+    rate_limit_max_requests: int = 50
+    rate_limit_window_seconds: int = 60
+
+    provision_rate_limit_max_requests_per_hour: int = 50
 
 
     provision_max_dbs_per_session: int = 3  
