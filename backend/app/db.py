@@ -1,6 +1,8 @@
 from typing import Optional
 from urllib.parse import quote_plus
 from pydantic import BaseModel
+from app.cache.redis_client import get_redis_client
+from app.config import get_settings
 import psycopg2
 
 
@@ -11,20 +13,38 @@ class DatabaseConfig(BaseModel):
     user: str = "schemasense"
     password: str = "schemasense_dev"
 
-
+redis_client = get_redis_client()
+settings = get_settings()
 _session_configs: dict[str, DatabaseConfig] = {}
+
+REDIS_KEY_PREFIX = "schemasense:session"
 
 
 #save current request db config for this session
 def set_database_config(config: DatabaseConfig, session_id: str) -> None:
+    key = f"{REDIS_KEY_PREFIX}:{session_id}:db_config"
+    ttl = settings.session_max_age_days * 86400
+
     if config is None:
+        redis_client.delete_key(key)
         _session_configs.pop(session_id, None)
+        
     else:
+        result = redis_client.set_response(key, config.model_dump(), ttl_seconds=ttl)
         _session_configs[session_id] = config
+        
+        if result["status"] == 0:
+            _session_configs[session_id] = config
 
 
 #get db config for this session
 def get_database_config(session_id: str) -> Optional[DatabaseConfig]:
+    key = f"{REDIS_KEY_PREFIX}:{session_id}:db_config"
+    result = redis_client.get_response(key)
+
+    if result["status"] == 1:
+        return DatabaseConfig(**result["data"])
+
     return _session_configs.get(session_id)
 
 
