@@ -26,14 +26,13 @@ def set_database_config(config: DatabaseConfig, session_id: str) -> None:
     ttl = settings.session_max_age_days * 86400
 
     if config is None:
-        redis_client.delete_key(key)
-        _session_configs.pop(session_id, None)
-        
+        result = redis_client.delete_key(key)
+        if result["status"] == 0 or not settings.redis_enabled:
+            _session_configs.pop(session_id, None)
+
     else:
         result = redis_client.set_response(key, config.model_dump(), ttl_seconds=ttl)
-        _session_configs[session_id] = config
-        
-        if result["status"] == 0:
+        if result["status"] == 0 or not settings.redis_enabled:
             _session_configs[session_id] = config
 
 
@@ -45,7 +44,10 @@ def get_database_config(session_id: str) -> Optional[DatabaseConfig]:
     if result["status"] == 1:
         return DatabaseConfig(**result["data"])
 
-    return _session_configs.get(session_id)
+    if not settings.redis_enabled:
+        return _session_configs.get(session_id)
+
+    return None
 
 
 #build postgres dsn
